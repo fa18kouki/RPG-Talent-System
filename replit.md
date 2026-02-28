@@ -7,7 +7,19 @@ A gamified human resource development platform that represents employees as RPG 
 - **Frontend**: React + Vite + TailwindCSS + Shadcn UI + wouter routing
 - **Backend**: Express.js REST API
 - **Database**: PostgreSQL with Drizzle ORM
+- **Auth**: Session-based authentication with express-session + connect-pg-simple, bcrypt password hashing
 - **Theme**: Pixel art / retro game UI with DotGothic16 font, square corners, thick borders, offset pixel shadows, warm pastel colors (light mode default)
+
+## Authentication & Roles
+
+- **Session**: express-session with PostgreSQL session store (connect-pg-simple)
+- **Roles**: `admin` and `user`
+- **Admin**: Can access all features including user management, create/modify employees, quests, completions
+- **User**: Can view employees, quests, dashboard (read-only access to main features)
+- **Login**: Email + password authentication
+- **Default accounts** (seeded):
+  - Admin: admin@questhr.com / admin123
+  - User: user@questhr.com / user123
 
 ## Visual Style
 
@@ -16,10 +28,11 @@ A gamified human resource development platform that represents employees as RPG 
 - **Borders**: All elements have 0px border-radius (global CSS rule), 2-3px thick borders
 - **Shadows**: Offset pixel-style shadows (e.g., 3px 3px 0px 0px) with no blur
 - **Dark Mode**: Dark purple palette with visible offset shadows, toggled via header button
-- **Default Mode**: Light (changed from dark)
+- **Default Mode**: Light
 
 ## Data Model
 
+- **Users**: Authentication users with email, hashed password, displayName, role (admin/user)
 - **Employees**: RPG characters with class (warrior/mage/healer/ranger/rogue/paladin), level, XP
 - **Skills**: Per-employee skills grouped by category (technical/communication/leadership/creativity/analytics) with levels 1-10
 - **Quests**: Tasks/goals with difficulty levels (easy/normal/hard/legendary) and XP rewards
@@ -27,17 +40,23 @@ A gamified human resource development platform that represents employees as RPG 
 
 ## Pages
 
+- `/login` - Login page (shown when not authenticated)
 - `/` - Dashboard with stats overview, top employees, recent activity
-- `/employees` - Employee list with search/filter, add employee form
+- `/employees` - Employee list with search/filter, add employee form (admin only for adding)
 - `/employees/:id` - Character detail with skill radar chart, quest board, history
 - `/quests` - Quest management with tabs for active/inactive quests
+- `/admin/users` - User management (admin only) - create, edit roles, delete users
 
 ## Key Files
 
-- `shared/schema.ts` - Data models, insert schemas, types, XP/level calculation
+- `shared/schema.ts` - Data models (including users), insert schemas, types, XP/level calculation
 - `server/db.ts` - PostgreSQL connection
-- `server/storage.ts` - Database storage interface
-- `server/routes.ts` - REST API endpoints
-- `server/seed.ts` - Seed data with 5 employees, skills, 8 quests, sample completions
+- `server/storage.ts` - Database storage interface (including user CRUD)
+- `server/routes.ts` - REST API endpoints with auth middleware (requireAuth, requireAdmin)
+- `server/index.ts` - Express server with session middleware setup
+- `server/seed.ts` - Seed data with default users, 5 employees, skills, 8 quests, sample completions
+- `client/src/hooks/use-auth.ts` - Authentication hook (login, logout, user state)
+- `client/src/pages/login.tsx` - Login page
+- `client/src/pages/admin-users.tsx` - Admin user management page
 - `client/src/index.css` - Pixel art theme CSS with custom properties and pixel shadow/border utilities
-- `client/src/components/` - Reusable RPG UI components (character-card, xp-bar, skill-radar, quest-card, class-icon)
+- `client/src/components/` - Reusable RPG UI components (character-card, xp-bar, skill-radar, quest-card, class-icon, app-sidebar)

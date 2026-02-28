@@ -1,8 +1,28 @@
 import { storage } from "./storage";
 import { db } from "./db";
-import { employees } from "@shared/schema";
+import { employees, users } from "@shared/schema";
+import bcrypt from "bcrypt";
 
 export async function seedDatabase() {
+  const existingUsers = await db.select().from(users).limit(1);
+  if (existingUsers.length === 0) {
+    const adminPassword = await bcrypt.hash("admin123", 10);
+    await storage.createUser({
+      email: "admin@questhr.com",
+      password: adminPassword,
+      displayName: "管理者",
+      role: "admin",
+    });
+    const userPassword = await bcrypt.hash("user123", 10);
+    await storage.createUser({
+      email: "user@questhr.com",
+      password: userPassword,
+      displayName: "一般ユーザー",
+      role: "user",
+    });
+    console.log("Default users created (admin@questhr.com / admin123, user@questhr.com / user123)");
+  }
+
   const existing = await db.select().from(employees).limit(1);
   if (existing.length > 0) return;
 

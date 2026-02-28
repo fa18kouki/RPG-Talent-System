@@ -99,6 +99,18 @@ export const quests = pgTable("quests", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const userRoles = ["admin", "user"] as const;
+export type UserRole = typeof userRoles[number];
+
+export const users = pgTable("users", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  email: text("email").notNull().unique(),
+  password: text("password").notNull(),
+  displayName: text("display_name").notNull(),
+  role: text("role").notNull().$type<UserRole>().default("user"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const questCompletions = pgTable("quest_completions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   questId: varchar("quest_id").notNull(),
@@ -125,6 +137,19 @@ export const insertQuestCompletionSchema = createInsertSchema(questCompletions).
   id: true,
   completedAt: true,
 });
+
+export const insertUserSchema = createInsertSchema(users).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const loginSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(6),
+});
+
+export type User = typeof users.$inferSelect;
+export type InsertUser = z.infer<typeof insertUserSchema>;
 
 export type Employee = typeof employees.$inferSelect;
 export type InsertEmployee = z.infer<typeof insertEmployeeSchema>;

@@ -3,7 +3,8 @@ import {
   type Skill, type InsertSkill,
   type Quest, type InsertQuest,
   type QuestCompletion, type InsertQuestCompletion,
-  employees, skills, quests, questCompletions,
+  type User, type InsertUser,
+  employees, skills, quests, questCompletions, users,
   getLevelFromTotalXP,
 } from "@shared/schema";
 import { db } from "./db";
@@ -26,6 +27,13 @@ export interface IStorage {
   getCompletions(): Promise<QuestCompletion[]>;
   getCompletionsByEmployee(employeeId: string): Promise<QuestCompletion[]>;
   createCompletion(data: InsertQuestCompletion): Promise<QuestCompletion>;
+
+  getUserByEmail(email: string): Promise<User | undefined>;
+  getUserById(id: string): Promise<User | undefined>;
+  getUsers(): Promise<User[]>;
+  createUser(data: InsertUser): Promise<User>;
+  updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined>;
+  deleteUser(id: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -101,6 +109,35 @@ export class DatabaseStorage implements IStorage {
     }
 
     return completion;
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.email, email));
+    return user;
+  }
+
+  async getUserById(id: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
+  }
+
+  async getUsers(): Promise<User[]> {
+    return db.select().from(users).orderBy(desc(users.createdAt));
+  }
+
+  async createUser(data: InsertUser): Promise<User> {
+    const [user] = await db.insert(users).values(data).returning();
+    return user;
+  }
+
+  async updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined> {
+    const [user] = await db.update(users).set(data).where(eq(users.id, id)).returning();
+    return user;
+  }
+
+  async deleteUser(id: string): Promise<boolean> {
+    const result = await db.delete(users).where(eq(users.id, id)).returning();
+    return result.length > 0;
   }
 }
 
