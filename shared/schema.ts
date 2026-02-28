@@ -66,6 +66,37 @@ export const skillCategoryLabels: Record<SkillCategory, string> = {
   analytics: "分析力",
 };
 
+export const avatarHairStyles = ["short", "long", "ponytail", "spiky", "bald", "bob"] as const;
+export type AvatarHairStyle = typeof avatarHairStyles[number];
+
+export const avatarEyeStyles = ["normal", "happy", "cool", "determined"] as const;
+export type AvatarEyeStyle = typeof avatarEyeStyles[number];
+
+export const avatarAccessories = ["none", "glasses", "earring", "headband", "crown", "scarf"] as const;
+export type AvatarAccessory = typeof avatarAccessories[number];
+
+export const avatarConfigSchema = z.object({
+  skinColor: z.string(),
+  hairStyle: z.enum(avatarHairStyles),
+  hairColor: z.string(),
+  eyeStyle: z.enum(avatarEyeStyles),
+  outfit: z.enum(characterClasses),
+  outfitColor: z.string(),
+  accessory: z.enum(avatarAccessories),
+});
+
+export type AvatarConfig = z.infer<typeof avatarConfigSchema>;
+
+export const defaultAvatarConfig: AvatarConfig = {
+  skinColor: "#F5D6C3",
+  hairStyle: "short",
+  hairColor: "#4A3728",
+  eyeStyle: "normal",
+  outfit: "warrior",
+  outfitColor: "#DC2626",
+  accessory: "none",
+};
+
 export const employees = pgTable("employees", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
@@ -76,6 +107,7 @@ export const employees = pgTable("employees", {
   currentXP: integer("current_xp").notNull().default(0),
   totalXP: integer("total_xp").notNull().default(0),
   avatarUrl: text("avatar_url"),
+  avatarConfig: text("avatar_config"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -108,6 +140,7 @@ export const users = pgTable("users", {
   password: text("password").notNull(),
   displayName: text("display_name").notNull(),
   role: text("role").notNull().$type<UserRole>().default("user"),
+  employeeId: varchar("employee_id"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -117,6 +150,19 @@ export const questCompletions = pgTable("quest_completions", {
   employeeId: varchar("employee_id").notNull(),
   completedAt: timestamp("completed_at").defaultNow(),
   xpEarned: integer("xp_earned").notNull(),
+});
+
+export const questAssignmentStatuses = ["active", "completed"] as const;
+export type QuestAssignmentStatus = typeof questAssignmentStatuses[number];
+
+export const questAssignments = pgTable("quest_assignments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  questId: varchar("quest_id").notNull(),
+  employeeId: varchar("employee_id").notNull(),
+  status: text("status").notNull().$type<QuestAssignmentStatus>().default("active"),
+  dueDate: timestamp("due_date"),
+  assignedAt: timestamp("assigned_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
 });
 
 export const insertEmployeeSchema = createInsertSchema(employees).omit({
@@ -143,6 +189,12 @@ export const insertUserSchema = createInsertSchema(users).omit({
   createdAt: true,
 });
 
+export const insertQuestAssignmentSchema = createInsertSchema(questAssignments).omit({
+  id: true,
+  assignedAt: true,
+  completedAt: true,
+});
+
 export const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(6),
@@ -159,6 +211,8 @@ export type Quest = typeof quests.$inferSelect;
 export type InsertQuest = z.infer<typeof insertQuestSchema>;
 export type QuestCompletion = typeof questCompletions.$inferSelect;
 export type InsertQuestCompletion = z.infer<typeof insertQuestCompletionSchema>;
+export type QuestAssignment = typeof questAssignments.$inferSelect;
+export type InsertQuestAssignment = z.infer<typeof insertQuestAssignmentSchema>;
 
 export function xpForLevel(level: number): number {
   return Math.floor(100 * Math.pow(1.5, level - 1));

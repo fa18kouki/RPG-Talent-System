@@ -1,7 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertEmployeeSchema, insertQuestSchema, insertQuestCompletionSchema, insertSkillSchema, loginSchema, insertUserSchema, users } from "@shared/schema";
+import { insertEmployeeSchema, insertQuestSchema, insertQuestCompletionSchema, insertSkillSchema, loginSchema, insertUserSchema, insertQuestAssignmentSchema, avatarConfigSchema } from "@shared/schema";
 import bcrypt from "bcrypt";
 
 function requireAuth(req: Request, res: Response, next: NextFunction) {
@@ -209,6 +209,139 @@ export async function registerRoutes(
       res.status(201).json(completion);
     } catch (err) {
       console.error("Error creating completion:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // === User's own data endpoints ===
+
+  app.get("/api/my/employee", requireAuth, async (req, res) => {
+    try {
+      const employee = await storage.getEmployeeByUserId(req.session.userId!);
+      if (!employee) return res.status(404).json({ error: "冒険者データが見つかりません" });
+      res.json(employee);
+    } catch (err) {
+      console.error("Error getting my employee:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.get("/api/my/quests", requireAuth, async (req, res) => {
+    try {
+      const employee = await storage.getEmployeeByUserId(req.session.userId!);
+      if (!employee) return res.status(404).json({ error: "冒険者データが見つかりません" });
+
+      const assignments = await storage.getQuestAssignmentsByEmployee(employee.id);
+      const allQuests = await storage.getQuests();
+      const questMap = new Map(allQuests.map(q => [q.id, q]));
+
+      const enriched = assignments.map(a => ({
+        ...a,
+        quest: questMap.get(a.questId) || null,
+      }));
+
+      res.json(enriched);
+    } catch (err) {
+      console.error("Error getting my quests:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.patch("/api/my/quests/:assignmentId/complete", requireAuth, async (req, res) => {
+    try {
+      const employee = await storage.getEmployeeByUserId(req.session.userId!);
+      if (!employee) return res.status(404).json({ error: "冒険者データが見つかりません" });
+
+      const assignments = await storage.getQuestAssignmentsByEmployee(employee.id);
+      const assignment = assignments.find(a => a.id === req.params.assignmentId);
+      if (!assignment) return res.status(404).json({ error: "クエスト割当が見つかりません" });
+      if (assignment.status === "completed") return res.status(400).json({ error: "このクエストは既に完了しています" });
+
+      const quest = await storage.getQuest(assignment.questId);
+      if (!quest) return res.status(404).json({ error: "クエストが見つかりません" });
+
+      const completed = await storage.completeQuestAssignment(assignment.id);
+
+      await storage.createCompletion({
+        questId: assignment.questId,
+        employeeId: employee.id,
+        xpEarned: quest.xpReward,
+      });
+
+      res.json(completed);
+    } catch (err) {
+      console.error("Error completing quest:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.patch("/api/my/avatar", requireAuth, async (req, res) => {
+    try {
+      const employee = await storage.getEmployeeByUserId(req.session.userId!);
+      if (!employee) return res.status(404).json({ error: "冒険者データが見つかりません" });
+
+      const parsed = avatarConfigSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+
+      const updated = await storage.updateEmployee(employee.id, {
+        avatarConfig: JSON.stringify(parsed.data),
+      });
+      res.json(updated);
+    } catch (err) {
+      console.error("Error updating avatar:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // === Admin quest assignment endpoints ===
+
+  app.get("/api/admin/quest-assignments", requireAdmin, async (_req, res) => {
+    try {
+      const assignments = await storage.getQuestAssignments();
+      const allQuests = await storage.getQuests();
+      const allEmployees = await storage.getEmployees();
+      const questMap = new Map(allQuests.map(q => [q.id, q]));
+      const employeeMap = new Map(allEmployees.map(e => [e.id, e]));
+
+      const enriched = assignments.map(a => ({
+        ...a,
+        quest: questMap.get(a.questId) || null,
+        employee: employeeMap.get(a.employeeId) || null,
+      }));
+
+      res.json(enriched);
+    } catch (err) {
+      console.error("Error getting quest assignments:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.post("/api/admin/quest-assignments", requireAdmin, async (req, res) => {
+    try {
+      const parsed = insertQuestAssignmentSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+
+      const quest = await storage.getQuest(parsed.data.questId);
+      if (!quest) return res.status(404).json({ error: "クエストが見つかりません" });
+
+      const employee = await storage.getEmployee(parsed.data.employeeId);
+      if (!employee) return res.status(404).json({ error: "冒険者が見つかりません" });
+
+      const assignment = await storage.createQuestAssignment(parsed.data);
+      res.status(201).json(assignment);
+    } catch (err) {
+      console.error("Error creating quest assignment:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.delete("/api/admin/quest-assignments/:id", requireAdmin, async (req, res) => {
+    try {
+      const deleted = await storage.deleteQuestAssignment(req.params.id);
+      if (!deleted) return res.status(404).json({ error: "割当が見つかりません" });
+      res.json({ message: "割当を削除しました" });
+    } catch (err) {
+      console.error("Error deleting quest assignment:", err);
       res.status(500).json({ error: "Internal server error" });
     }
   });

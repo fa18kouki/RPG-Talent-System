@@ -4,11 +4,12 @@ import {
   type Quest, type InsertQuest,
   type QuestCompletion, type InsertQuestCompletion,
   type User, type InsertUser,
-  employees, skills, quests, questCompletions, users,
+  type QuestAssignment, type InsertQuestAssignment,
+  employees, skills, quests, questCompletions, users, questAssignments,
   getLevelFromTotalXP,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 
 export interface IStorage {
   getEmployees(): Promise<Employee[]>;
@@ -34,6 +35,13 @@ export interface IStorage {
   createUser(data: InsertUser): Promise<User>;
   updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined>;
   deleteUser(id: string): Promise<boolean>;
+
+  getQuestAssignments(): Promise<QuestAssignment[]>;
+  getQuestAssignmentsByEmployee(employeeId: string): Promise<QuestAssignment[]>;
+  createQuestAssignment(data: InsertQuestAssignment): Promise<QuestAssignment>;
+  completeQuestAssignment(id: string): Promise<QuestAssignment | undefined>;
+  deleteQuestAssignment(id: string): Promise<boolean>;
+  getEmployeeByUserId(userId: string): Promise<Employee | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -138,6 +146,40 @@ export class DatabaseStorage implements IStorage {
   async deleteUser(id: string): Promise<boolean> {
     const result = await db.delete(users).where(eq(users.id, id)).returning();
     return result.length > 0;
+  }
+
+  async getQuestAssignments(): Promise<QuestAssignment[]> {
+    return db.select().from(questAssignments).orderBy(desc(questAssignments.assignedAt));
+  }
+
+  async getQuestAssignmentsByEmployee(employeeId: string): Promise<QuestAssignment[]> {
+    return db.select().from(questAssignments)
+      .where(eq(questAssignments.employeeId, employeeId))
+      .orderBy(desc(questAssignments.assignedAt));
+  }
+
+  async createQuestAssignment(data: InsertQuestAssignment): Promise<QuestAssignment> {
+    const [assignment] = await db.insert(questAssignments).values(data).returning();
+    return assignment;
+  }
+
+  async completeQuestAssignment(id: string): Promise<QuestAssignment | undefined> {
+    const [assignment] = await db.update(questAssignments)
+      .set({ status: "completed", completedAt: new Date() })
+      .where(and(eq(questAssignments.id, id), eq(questAssignments.status, "active")))
+      .returning();
+    return assignment;
+  }
+
+  async deleteQuestAssignment(id: string): Promise<boolean> {
+    const result = await db.delete(questAssignments).where(eq(questAssignments.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async getEmployeeByUserId(userId: string): Promise<Employee | undefined> {
+    const user = await this.getUserById(userId);
+    if (!user || !user.employeeId) return undefined;
+    return this.getEmployee(user.employeeId);
   }
 }
 

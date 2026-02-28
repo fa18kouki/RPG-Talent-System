@@ -1,6 +1,7 @@
 import { storage } from "./storage";
 import { db } from "./db";
-import { employees, users } from "@shared/schema";
+import { employees, users, questAssignments } from "@shared/schema";
+import { eq } from "drizzle-orm";
 import bcrypt from "bcrypt";
 
 export async function seedDatabase() {
@@ -199,6 +200,57 @@ export async function seedDatabase() {
     questId: createdQuests[5].id,
     employeeId: emp4.id,
     xpEarned: 100,
+  });
+
+  // Link demo user to employee (user@questhr.com → 田中 太郎)
+  const demoUser = await storage.getUserByEmail("user@questhr.com");
+  if (demoUser) {
+    await storage.updateUser(demoUser.id, { employeeId: emp1.id });
+    console.log("Linked user@questhr.com to employee 田中 太郎");
+  }
+
+  // Create sample quest assignments for the demo user's employee
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const nextWeek = new Date();
+  nextWeek.setDate(nextWeek.getDate() + 7);
+  const nextMonth = new Date();
+  nextMonth.setDate(nextMonth.getDate() + 30);
+
+  await storage.createQuestAssignment({
+    questId: createdQuests[1].id, // 新技術の探索
+    employeeId: emp1.id,
+    status: "active",
+    dueDate: nextWeek,
+  });
+
+  await storage.createQuestAssignment({
+    questId: createdQuests[3].id, // 全社プレゼンテーション
+    employeeId: emp1.id,
+    status: "active",
+    dueDate: nextMonth,
+  });
+
+  await storage.createQuestAssignment({
+    questId: createdQuests[7].id, // 社内勉強会の開催
+    employeeId: emp1.id,
+    status: "active",
+    dueDate: tomorrow,
+  });
+
+  // Assignments for other employees
+  await storage.createQuestAssignment({
+    questId: createdQuests[2].id, // チーム横断プロジェクト
+    employeeId: emp2.id,
+    status: "active",
+    dueDate: nextMonth,
+  });
+
+  await storage.createQuestAssignment({
+    questId: createdQuests[4].id, // イノベーションチャレンジ
+    employeeId: emp3.id,
+    status: "active",
+    dueDate: nextMonth,
   });
 
   console.log("Seed data inserted successfully");

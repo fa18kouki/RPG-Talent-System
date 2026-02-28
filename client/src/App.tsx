@@ -7,7 +7,8 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useAuth } from "@/hooks/use-auth";
-import { Loader2 } from "lucide-react";
+import { Loader2, LogOut, Shield } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/dashboard";
 import Employees from "@/pages/employees";
@@ -15,6 +16,8 @@ import EmployeeDetail from "@/pages/employee-detail";
 import Quests from "@/pages/quests";
 import Login from "@/pages/login";
 import AdminUsers from "@/pages/admin-users";
+import UserHome from "@/pages/user-home";
+import AdminQuestAssignments from "@/pages/admin-quest-assignments";
 
 function AdminRoute({ component: Component }: { component: React.ComponentType }) {
   const { isAdmin, isLoading } = useAuth();
@@ -23,7 +26,7 @@ function AdminRoute({ component: Component }: { component: React.ComponentType }
   return <Component />;
 }
 
-function Router() {
+function AdminRouter() {
   return (
     <Switch>
       <Route path="/" component={Dashboard} />
@@ -32,6 +35,9 @@ function Router() {
       <Route path="/quests" component={Quests} />
       <Route path="/admin/users">
         <AdminRoute component={AdminUsers} />
+      </Route>
+      <Route path="/admin/quest-assignments">
+        <AdminRoute component={AdminQuestAssignments} />
       </Route>
       <Route component={NotFound} />
     </Switch>
@@ -43,7 +49,7 @@ const sidebarStyle = {
   "--sidebar-width-icon": "3.5rem",
 };
 
-function AuthenticatedApp() {
+function AdminApp() {
   return (
     <SidebarProvider style={sidebarStyle as React.CSSProperties}>
       <div className="flex h-screen w-full">
@@ -54,12 +60,50 @@ function AuthenticatedApp() {
             <ThemeToggle />
           </header>
           <main className="flex-1 overflow-hidden">
-            <Router />
+            <AdminRouter />
           </main>
         </div>
       </div>
     </SidebarProvider>
   );
+}
+
+function UserApp() {
+  const { user, logout } = useAuth();
+
+  return (
+    <div className="flex flex-col h-screen w-full">
+      <header className="flex items-center justify-between p-3 border-b-2 h-12">
+        <div className="flex items-center gap-2">
+          <Shield className="h-4 w-4 text-primary" />
+          <span className="text-sm font-bold">Quest HR</span>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-muted-foreground font-mono">
+            {user?.displayName}
+          </span>
+          <ThemeToggle />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            onClick={() => logout.mutate()}
+            data-testid="button-logout"
+          >
+            <LogOut className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      </header>
+      <main className="flex-1 overflow-auto">
+        <UserHome />
+      </main>
+    </div>
+  );
+}
+
+function AuthenticatedApp() {
+  const { isAdmin } = useAuth();
+  return isAdmin ? <AdminApp /> : <UserApp />;
 }
 
 function AppContent() {
