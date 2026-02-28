@@ -156,6 +156,53 @@
   h1, h2, h3, h4, h5, h6 {
     letter-spacing: 0.02em;
   }
+
+  /* Admin view: clean, modern font overrides */
+  .admin-view {
+    font-family: "Noto Sans JP", system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: auto;
+    -moz-osx-font-smoothing: auto;
+    font-smooth: auto;
+  }
+
+  .admin-view * {
+    image-rendering: auto;
+    border-radius: revert !important;
+  }
+
+  .admin-view .font-mono {
+    font-family: "Noto Sans JP", system-ui, sans-serif;
+    font-weight: 600;
+  }
+
+  .admin-view h1,
+  .admin-view h2,
+  .admin-view h3,
+  .admin-view h4 {
+    font-family: "Noto Sans JP", system-ui, sans-serif;
+    letter-spacing: normal;
+  }
+
+  .admin-view .pixel-btn {
+    border-radius: 0.375rem !important;
+    border-width: 1px;
+    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  }
+
+  .admin-view .pixel-btn:hover {
+    transform: none;
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
+  }
+
+  .admin-view .pixel-btn:active {
+    transform: none;
+    box-shadow: inset 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  }
+
+  .admin-view .pixel-badge {
+    font-family: "Noto Sans JP", system-ui, sans-serif;
+    border-radius: 9999px !important;
+  }
 }
 
 @layer components {

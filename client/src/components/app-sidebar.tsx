@@ -1,4 +1,4 @@
-import { Sword, Users, ScrollText, LayoutDashboard, Shield, Sparkles, Crown, LogOut } from "lucide-react";
+import { Sword, Users, ScrollText, LayoutDashboard, Shield, Sparkles, Crown, LogOut, ClipboardList } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import {
@@ -22,6 +22,7 @@ const menuItems = [
 ];
 
 const adminMenuItems = [
+  { title: "クエスト割当", url: "/admin/quest-assignments", icon: ClipboardList },
   { title: "ユーザー管理", url: "/admin/users", icon: Crown },
 ];
 
