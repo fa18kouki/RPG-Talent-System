@@ -7,7 +7,16 @@ A gamified human resource development platform that represents employees as RPG 
 - **Frontend**: React + Vite + TailwindCSS + Shadcn UI + wouter routing
 - **Backend**: Express.js REST API
 - **Database**: PostgreSQL with Drizzle ORM
-- **Theme**: Fantasy RPG purple/indigo color scheme with dark mode default
+- **Theme**: Pixel art / retro game UI with DotGothic16 font, square corners, thick borders, offset pixel shadows, warm pastel colors (light mode default)
+
+## Visual Style
+
+- **Fonts**: DotGothic16 (body), Press Start 2P / Silkscreen (monospace/values)
+- **Colors**: Warm cream/beige background, pink primary, amber accents, dark purple sidebar
+- **Borders**: All elements have 0px border-radius (global CSS rule), 2-3px thick borders
+- **Shadows**: Offset pixel-style shadows (e.g., 3px 3px 0px 0px) with no blur
+- **Dark Mode**: Dark purple palette with visible offset shadows, toggled via header button
+- **Default Mode**: Light (changed from dark)
 
 ## Data Model
 
@@ -30,4 +39,5 @@ A gamified human resource development platform that represents employees as RPG 
 - `server/storage.ts` - Database storage interface
 - `server/routes.ts` - REST API endpoints
 - `server/seed.ts` - Seed data with 5 employees, skills, 8 quests, sample completions
+- `client/src/index.css` - Pixel art theme CSS with custom properties and pixel shadow/border utilities
 - `client/src/components/` - Reusable RPG UI components (character-card, xp-bar, skill-radar, quest-card, class-icon)

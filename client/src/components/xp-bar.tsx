@@ -1,5 +1,3 @@
-import { Progress } from "@/components/ui/progress";
-
 interface XPBarProps {
   currentXP: number;
   nextLevelXP: number;
@@ -9,25 +7,28 @@ interface XPBarProps {
 
 export function XPBar({ currentXP, nextLevelXP, level, size = "md" }: XPBarProps) {
   const percent = Math.min((currentXP / nextLevelXP) * 100, 100);
-  const heights = { sm: "h-1.5", md: "h-2.5", lg: "h-3.5" };
+  const heights = { sm: "h-3", md: "h-4", lg: "h-5" };
 
   return (
     <div className="w-full space-y-1">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-xs font-semibold text-muted-foreground">Lv.{level}</span>
-        <span className="text-xs text-muted-foreground font-mono">
+        <span className="text-[10px] font-mono font-bold text-primary">Lv.{level}</span>
+        <span className="text-[8px] text-muted-foreground font-mono">
           {currentXP} / {nextLevelXP} XP
         </span>
       </div>
-      <div className={`relative ${heights[size]} rounded-full bg-muted overflow-hidden`}>
+      <div className={`relative ${heights[size]} bg-muted border-2 border-border overflow-hidden`}>
         <div
-          className="absolute inset-0 rounded-full bg-gradient-to-r from-primary via-primary to-chart-1 transition-all duration-700 ease-out"
+          className="absolute inset-0 bg-gradient-to-r from-chart-4 via-chart-5 to-primary transition-all duration-500 ease-linear"
           style={{ width: `${percent}%` }}
           data-testid="xp-progress-fill"
         />
         <div
-          className="absolute inset-0 rounded-full bg-gradient-to-r from-transparent to-white/10"
-          style={{ width: `${percent}%` }}
+          className="absolute inset-0 opacity-30"
+          style={{
+            width: `${percent}%`,
+            backgroundImage: 'repeating-linear-gradient(90deg, transparent, transparent 4px, rgba(255,255,255,0.3) 4px, rgba(255,255,255,0.3) 8px)',
+          }}
         />
       </div>
     </div>

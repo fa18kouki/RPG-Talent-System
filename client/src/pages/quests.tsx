@@ -13,7 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Plus, ScrollText } from "lucide-react";
+import { Plus, ScrollText, Sparkles } from "lucide-react";
 import type { Quest, InsertQuest } from "@shared/schema";
 import {
   insertQuestSchema,
@@ -71,16 +71,17 @@ export default function Quests() {
       <div className="max-w-4xl mx-auto p-6 space-y-6">
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight" data-testid="text-quests-title">
+            <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2" data-testid="text-quests-title">
+              <Sparkles className="h-5 w-5 text-chart-4" />
               クエストボード
             </h1>
-            <p className="text-sm text-muted-foreground mt-1">
+            <p className="text-xs text-muted-foreground mt-1">
               冒険者が挑戦できるクエストを管理
             </p>
           </div>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
-              <Button data-testid="button-add-quest">
+              <Button className="pixel-btn" data-testid="button-add-quest">
                 <Plus className="h-4 w-4 mr-2" />
                 クエストを作成
               </Button>
@@ -102,7 +103,7 @@ export default function Quests() {
                       <FormItem>
                         <FormLabel>クエスト名</FormLabel>
                         <FormControl>
-                          <Input placeholder="技術ドキュメントの整備" data-testid="input-quest-title" {...field} />
+                          <Input placeholder="技術ドキュメントの整備" className="border-2" data-testid="input-quest-title" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -117,6 +118,7 @@ export default function Quests() {
                         <FormControl>
                           <Textarea
                             placeholder="クエストの詳細な説明..."
+                            className="border-2"
                             data-testid="input-quest-description"
                             {...field}
                           />
@@ -143,7 +145,7 @@ export default function Quests() {
                             value={field.value}
                           >
                             <FormControl>
-                              <SelectTrigger data-testid="select-quest-difficulty">
+                              <SelectTrigger className="border-2" data-testid="select-quest-difficulty">
                                 <SelectValue />
                               </SelectTrigger>
                             </FormControl>
@@ -167,7 +169,7 @@ export default function Quests() {
                           <FormLabel>スキルカテゴリ</FormLabel>
                           <Select onValueChange={field.onChange} value={field.value}>
                             <FormControl>
-                              <SelectTrigger data-testid="select-quest-category">
+                              <SelectTrigger className="border-2" data-testid="select-quest-category">
                                 <SelectValue />
                               </SelectTrigger>
                             </FormControl>
@@ -193,6 +195,7 @@ export default function Quests() {
                         <FormControl>
                           <Input
                             type="number"
+                            className="border-2"
                             data-testid="input-quest-xp"
                             {...field}
                             onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
@@ -204,7 +207,7 @@ export default function Quests() {
                   />
                   <Button
                     type="submit"
-                    className="w-full"
+                    className="w-full pixel-btn"
                     disabled={createMutation.isPending}
                     data-testid="button-submit-quest"
                   >
@@ -217,7 +220,7 @@ export default function Quests() {
         </div>
 
         <Tabs defaultValue="active">
-          <TabsList data-testid="tabs-quest-status">
+          <TabsList className="border-2 border-border" data-testid="tabs-quest-status">
             <TabsTrigger value="active" data-testid="tab-active-quests">
               アクティブ ({activeQuests.length})
             </TabsTrigger>
@@ -228,9 +231,9 @@ export default function Quests() {
           <TabsContent value="active" className="space-y-3 mt-4">
             {isLoading ? (
               Array.from({ length: 4 }).map((_, i) => (
-                <Card key={i} className="p-4">
+                <Card key={i} className="p-4 border-2 border-border">
                   <div className="flex items-center gap-3">
-                    <Skeleton className="h-10 w-10 rounded-md" />
+                    <Skeleton className="h-10 w-10" />
                     <div className="flex-1 space-y-2">
                       <Skeleton className="h-4 w-48" />
                       <Skeleton className="h-3 w-full" />
@@ -239,10 +242,10 @@ export default function Quests() {
                 </Card>
               ))
             ) : activeQuests.length === 0 ? (
-              <Card className="p-12 text-center">
+              <Card className="p-12 text-center pixel-box border-2 border-border">
                 <ScrollText className="h-12 w-12 text-muted-foreground mx-auto" />
                 <h3 className="text-lg font-semibold mt-4">クエストがありません</h3>
-                <p className="text-sm text-muted-foreground mt-1">
+                <p className="text-xs text-muted-foreground mt-1">
                   新しいクエストを作成して冒険を開始しましょう
                 </p>
               </Card>
@@ -252,7 +255,7 @@ export default function Quests() {
           </TabsContent>
           <TabsContent value="inactive" className="space-y-3 mt-4">
             {inactiveQuests.length === 0 ? (
-              <Card className="p-8 text-center">
+              <Card className="p-8 text-center pixel-box border-2 border-border">
                 <p className="text-sm text-muted-foreground">非アクティブなクエストはありません</p>
               </Card>
             ) : (

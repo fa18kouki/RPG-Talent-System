@@ -20,12 +20,12 @@ const classColors: Record<CharacterClass, string> = {
 };
 
 const classBgColors: Record<CharacterClass, string> = {
-  warrior: "bg-red-500/10 dark:bg-red-500/15",
-  mage: "bg-blue-500/10 dark:bg-blue-500/15",
-  healer: "bg-emerald-500/10 dark:bg-emerald-500/15",
-  ranger: "bg-amber-500/10 dark:bg-amber-500/15",
-  rogue: "bg-purple-500/10 dark:bg-purple-500/15",
-  paladin: "bg-sky-500/10 dark:bg-sky-500/15",
+  warrior: "bg-red-100 dark:bg-red-500/15 border-2 border-red-300 dark:border-red-500/30",
+  mage: "bg-blue-100 dark:bg-blue-500/15 border-2 border-blue-300 dark:border-blue-500/30",
+  healer: "bg-emerald-100 dark:bg-emerald-500/15 border-2 border-emerald-300 dark:border-emerald-500/30",
+  ranger: "bg-amber-100 dark:bg-amber-500/15 border-2 border-amber-300 dark:border-amber-500/30",
+  rogue: "bg-purple-100 dark:bg-purple-500/15 border-2 border-purple-300 dark:border-purple-500/30",
+  paladin: "bg-sky-100 dark:bg-sky-500/15 border-2 border-sky-300 dark:border-sky-500/30",
 };
 
 interface ClassIconProps {
@@ -48,7 +48,7 @@ export function ClassIcon({ characterClass, size = "md", showBg = true }: ClassI
 
   return (
     <div
-      className={`flex items-center justify-center rounded-md ${sizes[size].container} ${classBgColors[characterClass]}`}
+      className={`flex items-center justify-center ${sizes[size].container} ${classBgColors[characterClass]}`}
     >
       <Icon className={`${sizes[size].icon} ${classColors[characterClass]}`} />
     </div>

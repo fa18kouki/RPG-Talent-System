@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { CharacterCard } from "@/components/character-card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Users, ScrollText, Trophy, TrendingUp } from "lucide-react";
+import { Users, ScrollText, Trophy, TrendingUp, Sparkles } from "lucide-react";
 import type { Employee, Skill, Quest, QuestCompletion } from "@shared/schema";
 import { getLevelFromTotalXP } from "@shared/schema";
 
@@ -31,21 +31,21 @@ export default function Dashboard() {
       value: employees?.length ?? 0,
       icon: Users,
       color: "text-primary",
-      bg: "bg-primary/10",
+      bg: "bg-pink-100 dark:bg-primary/15 border-2 border-pink-300 dark:border-primary/30",
     },
     {
       label: "アクティブクエスト",
       value: quests?.filter((q) => q.isActive).length ?? 0,
       icon: ScrollText,
       color: "text-chart-2",
-      bg: "bg-chart-2/10",
+      bg: "bg-emerald-100 dark:bg-chart-2/15 border-2 border-emerald-300 dark:border-chart-2/30",
     },
     {
       label: "完了クエスト",
       value: completions?.length ?? 0,
       icon: Trophy,
       color: "text-chart-4",
-      bg: "bg-chart-4/10",
+      bg: "bg-amber-100 dark:bg-chart-4/15 border-2 border-amber-300 dark:border-chart-4/30",
     },
     {
       label: "平均レベル",
@@ -57,7 +57,7 @@ export default function Dashboard() {
         : 0,
       icon: TrendingUp,
       color: "text-chart-5",
-      bg: "bg-chart-5/10",
+      bg: "bg-orange-100 dark:bg-chart-5/15 border-2 border-orange-300 dark:border-chart-5/30",
     },
   ];
 
@@ -76,10 +76,11 @@ export default function Dashboard() {
     <div className="h-full overflow-auto">
       <div className="max-w-6xl mx-auto p-6 space-y-6">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight" data-testid="text-dashboard-title">
+          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2" data-testid="text-dashboard-title">
+            <Sparkles className="h-5 w-5 text-chart-4" />
             ダッシュボード
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          <p className="text-xs text-muted-foreground mt-1">
             ギルド全体の冒険者ステータスと活動状況
           </p>
         </div>
@@ -87,20 +88,20 @@ export default function Dashboard() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {isLoading
             ? Array.from({ length: 4 }).map((_, i) => (
-                <Card key={i} className="p-4">
-                  <Skeleton className="h-10 w-10 rounded-md" />
+                <Card key={i} className="p-4 border-2 border-border">
+                  <Skeleton className="h-10 w-10" />
                   <Skeleton className="h-8 w-16 mt-3" />
                   <Skeleton className="h-3 w-24 mt-1" />
                 </Card>
               ))
             : stats.map((stat) => (
-                <Card key={stat.label} className="p-4" data-testid={`card-stat-${stat.label}`}>
-                  <div className={`flex h-10 w-10 items-center justify-center rounded-md ${stat.bg}`}>
+                <Card key={stat.label} className="p-4 pixel-box border-2 border-border" data-testid={`card-stat-${stat.label}`}>
+                  <div className={`flex h-10 w-10 items-center justify-center ${stat.bg}`}>
                     <stat.icon className={`h-5 w-5 ${stat.color}`} />
                   </div>
                   <div className="mt-3">
-                    <p className="text-2xl font-bold">{stat.value}</p>
-                    <p className="text-xs text-muted-foreground">{stat.label}</p>
+                    <p className="text-2xl font-bold font-mono">{stat.value}</p>
+                    <p className="text-[10px] text-muted-foreground">{stat.label}</p>
                   </div>
                 </Card>
               ))}
@@ -115,9 +116,9 @@ export default function Dashboard() {
             {isLoading ? (
               <div className="space-y-3">
                 {Array.from({ length: 3 }).map((_, i) => (
-                  <Card key={i} className="p-5">
+                  <Card key={i} className="p-5 border-2 border-border">
                     <div className="flex items-center gap-4">
-                      <Skeleton className="h-14 w-14 rounded-full" />
+                      <Skeleton className="h-14 w-14" />
                       <div className="flex-1 space-y-2">
                         <Skeleton className="h-4 w-32" />
                         <Skeleton className="h-3 w-24" />
@@ -134,7 +135,7 @@ export default function Dashboard() {
                   return (
                     <div key={emp.id} className="relative">
                       {index < 3 && (
-                        <div className="absolute -left-1 -top-1 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-chart-4 text-[11px] font-bold text-white">
+                        <div className="absolute -left-1 -top-1 z-10 flex h-7 w-7 items-center justify-center bg-chart-4 text-[9px] font-mono font-bold text-white border-2 border-amber-600">
                           {index + 1}
                         </div>
                       )}
@@ -154,14 +155,14 @@ export default function Dashboard() {
             {isLoading ? (
               <div className="space-y-2">
                 {Array.from({ length: 5 }).map((_, i) => (
-                  <Card key={i} className="p-3">
+                  <Card key={i} className="p-3 border-2 border-border">
                     <Skeleton className="h-4 w-full" />
                     <Skeleton className="h-3 w-20 mt-2" />
                   </Card>
                 ))}
               </div>
             ) : recentCompletions.length === 0 ? (
-              <Card className="p-8 text-center">
+              <Card className="p-8 text-center pixel-box border-2 border-border">
                 <ScrollText className="h-8 w-8 text-muted-foreground mx-auto" />
                 <p className="text-sm text-muted-foreground mt-2">まだクエスト完了がありません</p>
               </Card>
@@ -171,7 +172,7 @@ export default function Dashboard() {
                   const quest = quests?.find((q) => q.id === completion.questId);
                   const emp = employees?.find((e) => e.id === completion.employeeId);
                   return (
-                    <Card key={completion.id} className="p-3" data-testid={`card-completion-${completion.id}`}>
+                    <Card key={completion.id} className="p-3 pixel-box border-2 border-border" data-testid={`card-completion-${completion.id}`}>
                       <div className="flex items-center justify-between gap-2">
                         <div className="min-w-0">
                           <p className="text-sm font-medium truncate">
@@ -181,7 +182,7 @@ export default function Dashboard() {
                             {quest?.title ?? "不明なクエスト"}
                           </p>
                         </div>
-                        <span className="text-xs font-mono font-semibold text-primary shrink-0">
+                        <span className="text-[9px] font-mono font-bold text-chart-4 shrink-0">
                           +{completion.xpEarned} XP
                         </span>
                       </div>

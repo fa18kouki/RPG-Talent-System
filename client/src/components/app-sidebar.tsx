@@ -1,4 +1,4 @@
-import { Sword, Users, ScrollText, LayoutDashboard, Shield } from "lucide-react";
+import { Sword, Users, ScrollText, LayoutDashboard, Shield, Sparkles } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import {
   Sidebar,
@@ -27,19 +27,22 @@ export function AppSidebar() {
       <SidebarHeader className="p-4">
         <Link href="/" data-testid="link-home">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary">
+            <div className="flex h-10 w-10 items-center justify-center bg-primary border-2 border-primary-foreground/30">
               <Shield className="h-5 w-5 text-primary-foreground" />
             </div>
             <div>
-              <h1 className="text-sm font-bold tracking-tight text-sidebar-foreground">Quest HR</h1>
-              <p className="text-xs text-sidebar-foreground/60">RPG人材育成システム</p>
+              <h1 className="text-sm font-bold tracking-tight text-sidebar-foreground flex items-center gap-1">
+                Quest HR
+                <Sparkles className="h-3 w-3 text-chart-4" />
+              </h1>
+              <p className="text-[10px] text-sidebar-foreground/60">RPG人材育成システム</p>
             </div>
           </div>
         </Link>
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel className="text-sidebar-foreground/40 text-xs uppercase tracking-wider">
+          <SidebarGroupLabel className="text-sidebar-foreground/40 text-[10px] uppercase tracking-wider font-mono">
             メニュー
           </SidebarGroupLabel>
           <SidebarGroupContent>
@@ -63,7 +66,7 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter className="p-4">
-        <div className="flex items-center gap-2 text-xs text-sidebar-foreground/40">
+        <div className="flex items-center gap-2 text-[10px] text-sidebar-foreground/40 font-mono">
           <Sword className="h-3 w-3" />
           <span>POC v1.0</span>
         </div>

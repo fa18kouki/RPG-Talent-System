@@ -43,8 +43,9 @@ export function SkillRadar({ skills, size = 200 }: SkillRadarProps) {
               points={points}
               fill="none"
               stroke="hsl(var(--border))"
-              strokeWidth="1"
+              strokeWidth="2"
               opacity={0.5}
+              strokeLinejoin="miter"
             />
           );
         })}
@@ -59,7 +60,7 @@ export function SkillRadar({ skills, size = 200 }: SkillRadarProps) {
               x2={p.x}
               y2={p.y}
               stroke="hsl(var(--border))"
-              strokeWidth="1"
+              strokeWidth="2"
               opacity={0.3}
             />
           );
@@ -70,19 +71,21 @@ export function SkillRadar({ skills, size = 200 }: SkillRadarProps) {
             .map((score, i) => getPoint(i, score))
             .map((p) => `${p.x},${p.y}`)
             .join(" ")}
-          fill="hsl(var(--primary) / 0.15)"
+          fill="hsl(var(--primary) / 0.2)"
           stroke="hsl(var(--primary))"
-          strokeWidth="2"
+          strokeWidth="3"
+          strokeLinejoin="miter"
         />
 
         {categoryScores.map((score, i) => {
           const p = getPoint(i, score);
           return (
-            <circle
+            <rect
               key={i}
-              cx={p.x}
-              cy={p.y}
-              r="4"
+              x={p.x - 4}
+              y={p.y - 4}
+              width="8"
+              height="8"
               fill="hsl(var(--primary))"
               stroke="hsl(var(--background))"
               strokeWidth="2"
@@ -100,6 +103,7 @@ export function SkillRadar({ skills, size = 200 }: SkillRadarProps) {
               textAnchor="middle"
               dominantBaseline="middle"
               className="fill-muted-foreground text-[10px] font-medium"
+              style={{ fontFamily: 'var(--font-sans)' }}
             >
               {skillCategoryLabels[cat]}
             </text>

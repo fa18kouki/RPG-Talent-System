@@ -11,7 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Plus, Search, Users } from "lucide-react";
+import { Plus, Search, Users, Sparkles } from "lucide-react";
 import type { Employee, Skill, InsertEmployee } from "@shared/schema";
 import { insertEmployeeSchema, characterClasses, classLabels } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -73,16 +73,17 @@ export default function Employees() {
       <div className="max-w-6xl mx-auto p-6 space-y-6">
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight" data-testid="text-employees-title">
+            <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2" data-testid="text-employees-title">
+              <Sparkles className="h-5 w-5 text-chart-4" />
               冒険者一覧
             </h1>
-            <p className="text-sm text-muted-foreground mt-1">
+            <p className="text-xs text-muted-foreground mt-1">
               ギルドに所属する全冒険者のステータス
             </p>
           </div>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
-              <Button data-testid="button-add-employee">
+              <Button className="pixel-btn" data-testid="button-add-employee">
                 <Plus className="h-4 w-4 mr-2" />
                 冒険者を追加
               </Button>
@@ -104,7 +105,7 @@ export default function Employees() {
                       <FormItem>
                         <FormLabel>名前</FormLabel>
                         <FormControl>
-                          <Input placeholder="山田 太郎" data-testid="input-employee-name" {...field} />
+                          <Input placeholder="山田 太郎" className="border-2" data-testid="input-employee-name" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -117,7 +118,7 @@ export default function Employees() {
                       <FormItem>
                         <FormLabel>役職</FormLabel>
                         <FormControl>
-                          <Input placeholder="シニアエンジニア" data-testid="input-employee-title" {...field} />
+                          <Input placeholder="シニアエンジニア" className="border-2" data-testid="input-employee-title" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -130,7 +131,7 @@ export default function Employees() {
                       <FormItem>
                         <FormLabel>部署</FormLabel>
                         <FormControl>
-                          <Input placeholder="開発部" data-testid="input-employee-department" {...field} />
+                          <Input placeholder="開発部" className="border-2" data-testid="input-employee-department" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -144,7 +145,7 @@ export default function Employees() {
                         <FormLabel>ジョブクラス</FormLabel>
                         <Select onValueChange={field.onChange} value={field.value}>
                           <FormControl>
-                            <SelectTrigger data-testid="select-employee-class">
+                            <SelectTrigger className="border-2" data-testid="select-employee-class">
                               <SelectValue placeholder="クラスを選択" />
                             </SelectTrigger>
                           </FormControl>
@@ -162,7 +163,7 @@ export default function Employees() {
                   />
                   <Button
                     type="submit"
-                    className="w-full"
+                    className="w-full pixel-btn"
                     disabled={createMutation.isPending}
                     data-testid="button-submit-employee"
                   >
@@ -181,12 +182,12 @@ export default function Employees() {
               placeholder="冒険者を検索..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-9"
+              className="pl-9 border-2"
               data-testid="input-search-employees"
             />
           </div>
           <Select value={classFilter} onValueChange={setClassFilter}>
-            <SelectTrigger className="w-[160px]" data-testid="select-class-filter">
+            <SelectTrigger className="w-[160px] border-2" data-testid="select-class-filter">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -203,9 +204,9 @@ export default function Employees() {
         {isLoading ? (
           <div className="grid md:grid-cols-2 gap-4">
             {Array.from({ length: 6 }).map((_, i) => (
-              <Card key={i} className="p-5">
+              <Card key={i} className="p-5 border-2 border-border">
                 <div className="flex items-center gap-4">
-                  <Skeleton className="h-14 w-14 rounded-full" />
+                  <Skeleton className="h-14 w-14" />
                   <div className="flex-1 space-y-2">
                     <Skeleton className="h-4 w-32" />
                     <Skeleton className="h-3 w-24" />
@@ -216,10 +217,10 @@ export default function Employees() {
             ))}
           </div>
         ) : filtered?.length === 0 ? (
-          <Card className="p-12 text-center">
+          <Card className="p-12 text-center pixel-box border-2 border-border">
             <Users className="h-12 w-12 text-muted-foreground mx-auto" />
             <h3 className="text-lg font-semibold mt-4">冒険者が見つかりません</h3>
-            <p className="text-sm text-muted-foreground mt-1">
+            <p className="text-xs text-muted-foreground mt-1">
               検索条件を変更するか、新しい冒険者を登録してください
             </p>
           </Card>
