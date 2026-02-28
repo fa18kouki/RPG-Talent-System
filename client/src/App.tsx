@@ -52,7 +52,7 @@ const sidebarStyle = {
 function AdminApp() {
   return (
     <SidebarProvider style={sidebarStyle as React.CSSProperties}>
-      <div className="flex h-screen w-full">
+      <div className="admin-view flex h-screen w-full">
         <AppSidebar />
         <div className="flex flex-col flex-1 min-w-0">
           <header className="flex items-center justify-between gap-1 p-2 border-b-2 h-12">
