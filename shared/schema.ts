@@ -97,6 +97,18 @@ export const defaultAvatarConfig: AvatarConfig = {
   accessory: "none",
 };
 
+// --- Quest submission types ---
+export const questSubmissionTypes = ["button_only", "file_upload", "form_fill"] as const;
+export type QuestSubmissionType = typeof questSubmissionTypes[number];
+
+export const questSubmissionTypeLabels: Record<QuestSubmissionType, string> = {
+  button_only: "ボタン申請",
+  file_upload: "ファイル提出",
+  form_fill: "フォーム入力",
+};
+
+// --- Tables ---
+
 export const employees = pgTable("employees", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
@@ -127,6 +139,8 @@ export const quests = pgTable("quests", {
   difficulty: text("difficulty").notNull().$type<QuestDifficulty>(),
   xpReward: integer("xp_reward").notNull(),
   skillCategory: text("skill_category").notNull().$type<SkillCategory>(),
+  submissionType: text("submission_type").notNull().$type<QuestSubmissionType>().default("button_only"),
+  formTemplate: text("form_template"), // JSON: [{label, type, required}] for form_fill
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -152,8 +166,16 @@ export const questCompletions = pgTable("quest_completions", {
   xpEarned: integer("xp_earned").notNull(),
 });
 
-export const questAssignmentStatuses = ["active", "completed"] as const;
+export const questAssignmentStatuses = ["active", "pending_review", "approved", "rejected", "completed"] as const;
 export type QuestAssignmentStatus = typeof questAssignmentStatuses[number];
+
+export const questAssignmentStatusLabels: Record<QuestAssignmentStatus, string> = {
+  active: "進行中",
+  pending_review: "承認待ち",
+  approved: "承認済み",
+  rejected: "差戻し",
+  completed: "完了",
+};
 
 export const questAssignments = pgTable("quest_assignments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -163,6 +185,15 @@ export const questAssignments = pgTable("quest_assignments", {
   dueDate: timestamp("due_date"),
   assignedAt: timestamp("assigned_at").defaultNow(),
   completedAt: timestamp("completed_at"),
+  // Submission data
+  submissionNote: text("submission_note"),
+  submissionFiles: text("submission_files"), // JSON array of file paths
+  submissionData: text("submission_data"),   // JSON form data for form_fill
+  submittedAt: timestamp("submitted_at"),
+  // Review data
+  reviewNote: text("review_note"),
+  reviewedBy: varchar("reviewed_by"),
+  reviewedAt: timestamp("reviewed_at"),
 });
 
 export const insertEmployeeSchema = createInsertSchema(employees).omit({
@@ -193,6 +224,10 @@ export const insertQuestAssignmentSchema = createInsertSchema(questAssignments).
   id: true,
   assignedAt: true,
   completedAt: true,
+  submittedAt: true,
+  reviewNote: true,
+  reviewedBy: true,
+  reviewedAt: true,
 });
 
 export const loginSchema = z.object({
