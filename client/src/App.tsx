@@ -88,6 +88,7 @@ function UserApp() {
             size="icon"
             className="h-7 w-7"
             onClick={() => logout.mutate()}
+            disabled={logout.isPending}
             data-testid="button-logout"
           >
             <LogOut className="h-3.5 w-3.5" />

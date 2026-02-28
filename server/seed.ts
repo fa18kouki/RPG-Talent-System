@@ -24,8 +24,21 @@ export async function seedDatabase() {
     console.log("Default users created (admin@questhr.com / admin123, user@questhr.com / user123)");
   }
 
+  // Ensure user→employee link exists even if employees were already seeded
   const existing = await db.select().from(employees).limit(1);
-  if (existing.length > 0) return;
+  if (existing.length > 0) {
+    // Still ensure user-employee link exists
+    const demoUser = await storage.getUserByEmail("user@questhr.com");
+    if (demoUser && !demoUser.employeeId) {
+      const allEmployees = await storage.getEmployees();
+      const tanaka = allEmployees.find(e => e.name === "田中 太郎");
+      if (tanaka) {
+        await storage.updateUser(demoUser.id, { employeeId: tanaka.id });
+        console.log("Linked user@questhr.com to existing employee 田中 太郎");
+      }
+    }
+    return;
+  }
 
   const emp1 = await storage.createEmployee({
     name: "田中 太郎",
@@ -118,14 +131,16 @@ export async function seedDatabase() {
       difficulty: "easy" as const,
       xpReward: 50,
       skillCategory: "technical" as const,
+      submissionType: "button_only" as const,
       isActive: true,
     },
     {
       title: "新技術の探索",
-      description: "新しいフレームワークやツールを調査し、チームに導入提案書を作成する",
+      description: "新しいフレームワークやツールを調査し、チームに導入提案書を作成する。PDFまたはWordでレポートを提出してください",
       difficulty: "normal" as const,
       xpReward: 100,
       skillCategory: "technical" as const,
+      submissionType: "file_upload" as const,
       isActive: true,
     },
     {
@@ -134,14 +149,16 @@ export async function seedDatabase() {
       difficulty: "hard" as const,
       xpReward: 200,
       skillCategory: "leadership" as const,
+      submissionType: "button_only" as const,
       isActive: true,
     },
     {
       title: "全社プレゼンテーション",
-      description: "全社ミーティングでプロジェクト成果を発表し、Q&Aセッションをリードする",
+      description: "全社ミーティングでプロジェクト成果を発表し、Q&Aセッションをリードする。発表資料を提出してください",
       difficulty: "hard" as const,
       xpReward: 200,
       skillCategory: "communication" as const,
+      submissionType: "file_upload" as const,
       isActive: true,
     },
     {
@@ -150,6 +167,13 @@ export async function seedDatabase() {
       difficulty: "legendary" as const,
       xpReward: 500,
       skillCategory: "creativity" as const,
+      submissionType: "form_fill" as const,
+      formTemplate: JSON.stringify([
+        { label: "アイデア概要", type: "textarea", required: true },
+        { label: "ターゲットユーザー", type: "text", required: true },
+        { label: "期待される効果", type: "textarea", required: true },
+        { label: "プロトタイプURL", type: "text", required: false },
+      ]),
       isActive: true,
     },
     {
@@ -158,6 +182,12 @@ export async function seedDatabase() {
       difficulty: "normal" as const,
       xpReward: 100,
       skillCategory: "analytics" as const,
+      submissionType: "form_fill" as const,
+      formTemplate: JSON.stringify([
+        { label: "分析対象期間", type: "text", required: true },
+        { label: "主な発見", type: "textarea", required: true },
+        { label: "改善提案", type: "textarea", required: true },
+      ]),
       isActive: true,
     },
     {

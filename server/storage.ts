@@ -9,7 +9,7 @@ import {
   getLevelFromTotalXP,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, or } from "drizzle-orm";
 
 export interface IStorage {
   getEmployees(): Promise<Employee[]>;
@@ -38,10 +38,12 @@ export interface IStorage {
 
   getQuestAssignments(): Promise<QuestAssignment[]>;
   getQuestAssignmentsByEmployee(employeeId: string): Promise<QuestAssignment[]>;
+  getQuestAssignment(id: string): Promise<QuestAssignment | undefined>;
   createQuestAssignment(data: InsertQuestAssignment): Promise<QuestAssignment>;
-  completeQuestAssignment(id: string): Promise<QuestAssignment | undefined>;
+  updateQuestAssignment(id: string, data: Partial<QuestAssignment>): Promise<QuestAssignment | undefined>;
   deleteQuestAssignment(id: string): Promise<boolean>;
   getEmployeeByUserId(userId: string): Promise<Employee | undefined>;
+  getPendingReviewAssignments(): Promise<QuestAssignment[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -158,15 +160,20 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(questAssignments.assignedAt));
   }
 
+  async getQuestAssignment(id: string): Promise<QuestAssignment | undefined> {
+    const [assignment] = await db.select().from(questAssignments).where(eq(questAssignments.id, id));
+    return assignment;
+  }
+
   async createQuestAssignment(data: InsertQuestAssignment): Promise<QuestAssignment> {
     const [assignment] = await db.insert(questAssignments).values(data).returning();
     return assignment;
   }
 
-  async completeQuestAssignment(id: string): Promise<QuestAssignment | undefined> {
+  async updateQuestAssignment(id: string, data: Partial<QuestAssignment>): Promise<QuestAssignment | undefined> {
     const [assignment] = await db.update(questAssignments)
-      .set({ status: "completed", completedAt: new Date() })
-      .where(and(eq(questAssignments.id, id), eq(questAssignments.status, "active")))
+      .set(data)
+      .where(eq(questAssignments.id, id))
       .returning();
     return assignment;
   }
@@ -180,6 +187,12 @@ export class DatabaseStorage implements IStorage {
     const user = await this.getUserById(userId);
     if (!user || !user.employeeId) return undefined;
     return this.getEmployee(user.employeeId);
+  }
+
+  async getPendingReviewAssignments(): Promise<QuestAssignment[]> {
+    return db.select().from(questAssignments)
+      .where(eq(questAssignments.status, "pending_review"))
+      .orderBy(desc(questAssignments.submittedAt));
   }
 }
 

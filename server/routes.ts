@@ -3,6 +3,42 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertEmployeeSchema, insertQuestSchema, insertQuestCompletionSchema, insertSkillSchema, loginSchema, insertUserSchema, insertQuestAssignmentSchema, avatarConfigSchema } from "@shared/schema";
 import bcrypt from "bcrypt";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
+
+// File upload configuration
+const uploadDir = path.join(process.cwd(), "uploads");
+if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, uploadDir),
+    filename: (_req, file, cb) => {
+      const ext = path.extname(file.originalname);
+      const name = `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`;
+      cb(null, name);
+    },
+  }),
+  limits: { fileSize: 20 * 1024 * 1024 }, // 20MB
+  fileFilter: (_req, file, cb) => {
+    const allowed = [
+      "application/pdf",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/vnd.ms-excel",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/vnd.ms-powerpoint",
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      "image/png",
+      "image/jpeg",
+      "image/gif",
+      "text/plain",
+      "text/csv",
+    ];
+    cb(null, allowed.includes(file.mimetype));
+  },
+});
 
 function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (!req.session.userId) {
@@ -26,6 +62,15 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+
+  // Serve uploaded files
+  app.use("/uploads", requireAuth, (req, res, next) => {
+    const filePath = path.join(uploadDir, path.basename(req.path));
+    if (!fs.existsSync(filePath)) return res.status(404).json({ error: "ファイルが見つかりません" });
+    res.sendFile(filePath);
+  });
+
+  // === Auth ===
 
   app.post("/api/auth/login", async (req, res) => {
     try {
@@ -69,6 +114,8 @@ export async function registerRoutes(
     res.json(safeUser);
   });
 
+  // === Admin Users ===
+
   app.get("/api/admin/users", requireAdmin, async (_req, res) => {
     const allUsers = await storage.getUsers();
     const safeUsers = allUsers.map(({ password, ...u }) => u);
@@ -103,6 +150,7 @@ export async function registerRoutes(
       if (req.body.displayName) updateData.displayName = req.body.displayName;
       if (req.body.email) updateData.email = req.body.email;
       if (req.body.role && ["admin", "user"].includes(req.body.role)) updateData.role = req.body.role;
+      if (req.body.employeeId !== undefined) updateData.employeeId = req.body.employeeId || null;
       if (req.body.password && req.body.password.length >= 6) {
         updateData.password = await bcrypt.hash(req.body.password, 10);
       }
@@ -130,6 +178,8 @@ export async function registerRoutes(
     }
   });
 
+  // === Employees ===
+
   app.get("/api/employees", requireAuth, async (_req, res) => {
     const employees = await storage.getEmployees();
     res.json(employees);
@@ -148,6 +198,8 @@ export async function registerRoutes(
     res.status(201).json(employee);
   });
 
+  // === Skills ===
+
   app.get("/api/skills", requireAuth, async (_req, res) => {
     const allSkills = await storage.getSkills();
     res.json(allSkills);
@@ -165,6 +217,8 @@ export async function registerRoutes(
     res.status(201).json(skill);
   });
 
+  // === Quests ===
+
   app.get("/api/quests", requireAuth, async (_req, res) => {
     const questList = await storage.getQuests();
     res.json(questList);
@@ -176,6 +230,8 @@ export async function registerRoutes(
     const quest = await storage.createQuest(parsed.data);
     res.status(201).json(quest);
   });
+
+  // === Completions ===
 
   app.get("/api/completions", requireAuth, async (_req, res) => {
     const completions = await storage.getCompletions();
@@ -247,20 +303,119 @@ export async function registerRoutes(
     }
   });
 
+  // Submit quest (button_only)
+  app.patch("/api/my/quests/:assignmentId/submit", requireAuth, async (req, res) => {
+    try {
+      const employee = await storage.getEmployeeByUserId(req.session.userId!);
+      if (!employee) return res.status(404).json({ error: "冒険者データが見つかりません" });
+
+      const assignment = await storage.getQuestAssignment(req.params.assignmentId);
+      if (!assignment || assignment.employeeId !== employee.id) {
+        return res.status(404).json({ error: "クエスト割当が見つかりません" });
+      }
+      if (assignment.status !== "active") {
+        return res.status(400).json({ error: "このクエストは既に提出済みです" });
+      }
+
+      const quest = await storage.getQuest(assignment.questId);
+      if (!quest) return res.status(404).json({ error: "クエストが見つかりません" });
+
+      const note = req.body.note || null;
+      const formData = req.body.formData ? JSON.stringify(req.body.formData) : null;
+
+      // button_only: auto-approve → completed immediately
+      if (quest.submissionType === "button_only") {
+        const updated = await storage.updateQuestAssignment(assignment.id, {
+          status: "completed",
+          submissionNote: note,
+          submittedAt: new Date(),
+          completedAt: new Date(),
+        });
+        await storage.createCompletion({
+          questId: assignment.questId,
+          employeeId: employee.id,
+          xpEarned: quest.xpReward,
+        });
+        return res.json(updated);
+      }
+
+      // file_upload / form_fill: go to pending_review
+      const updated = await storage.updateQuestAssignment(assignment.id, {
+        status: "pending_review",
+        submissionNote: note,
+        submissionData: formData,
+        submittedAt: new Date(),
+      });
+      res.json(updated);
+    } catch (err) {
+      console.error("Error submitting quest:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Upload files for quest submission
+  app.post("/api/my/quests/:assignmentId/upload", requireAuth, upload.array("files", 5), async (req, res) => {
+    try {
+      const employee = await storage.getEmployeeByUserId(req.session.userId!);
+      if (!employee) return res.status(404).json({ error: "冒険者データが見つかりません" });
+
+      const assignment = await storage.getQuestAssignment(req.params.assignmentId);
+      if (!assignment || assignment.employeeId !== employee.id) {
+        return res.status(404).json({ error: "クエスト割当が見つかりません" });
+      }
+      if (assignment.status !== "active" && assignment.status !== "rejected") {
+        return res.status(400).json({ error: "このクエストにはファイルをアップロードできません" });
+      }
+
+      const files = req.files as Express.Multer.File[];
+      if (!files || files.length === 0) {
+        return res.status(400).json({ error: "ファイルが選択されていません" });
+      }
+
+      // Merge with existing files
+      const existingFiles: Array<{ name: string; path: string }> = assignment.submissionFiles
+        ? JSON.parse(assignment.submissionFiles)
+        : [];
+
+      const newFiles = files.map(f => ({
+        name: f.originalname,
+        path: `/uploads/${f.filename}`,
+      }));
+
+      const allFiles = [...existingFiles, ...newFiles];
+
+      const updated = await storage.updateQuestAssignment(assignment.id, {
+        submissionFiles: JSON.stringify(allFiles),
+      });
+
+      res.json({ files: allFiles, assignment: updated });
+    } catch (err) {
+      console.error("Error uploading files:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Keep the old complete endpoint for backward compatibility
   app.patch("/api/my/quests/:assignmentId/complete", requireAuth, async (req, res) => {
     try {
       const employee = await storage.getEmployeeByUserId(req.session.userId!);
       if (!employee) return res.status(404).json({ error: "冒険者データが見つかりません" });
 
-      const assignments = await storage.getQuestAssignmentsByEmployee(employee.id);
-      const assignment = assignments.find(a => a.id === req.params.assignmentId);
-      if (!assignment) return res.status(404).json({ error: "クエスト割当が見つかりません" });
-      if (assignment.status === "completed") return res.status(400).json({ error: "このクエストは既に完了しています" });
+      const assignment = await storage.getQuestAssignment(req.params.assignmentId);
+      if (!assignment || assignment.employeeId !== employee.id) {
+        return res.status(404).json({ error: "クエスト割当が見つかりません" });
+      }
+      if (assignment.status !== "active") {
+        return res.status(400).json({ error: "このクエストは完了できません" });
+      }
 
       const quest = await storage.getQuest(assignment.questId);
       if (!quest) return res.status(404).json({ error: "クエストが見つかりません" });
 
-      const completed = await storage.completeQuestAssignment(assignment.id);
+      const completed = await storage.updateQuestAssignment(assignment.id, {
+        status: "completed",
+        completedAt: new Date(),
+      });
 
       await storage.createCompletion({
         questId: assignment.questId,
@@ -316,6 +471,78 @@ export async function registerRoutes(
     }
   });
 
+  // Get pending review assignments for admin
+  app.get("/api/admin/pending-reviews", requireAdmin, async (_req, res) => {
+    try {
+      const assignments = await storage.getPendingReviewAssignments();
+      const allQuests = await storage.getQuests();
+      const allEmployees = await storage.getEmployees();
+      const questMap = new Map(allQuests.map(q => [q.id, q]));
+      const employeeMap = new Map(allEmployees.map(e => [e.id, e]));
+
+      const enriched = assignments.map(a => ({
+        ...a,
+        quest: questMap.get(a.questId) || null,
+        employee: employeeMap.get(a.employeeId) || null,
+      }));
+
+      res.json(enriched);
+    } catch (err) {
+      console.error("Error getting pending reviews:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Approve or reject a quest submission
+  app.patch("/api/admin/quest-assignments/:id/review", requireAdmin, async (req, res) => {
+    try {
+      const { action, note } = req.body;
+      if (!action || !["approve", "reject"].includes(action)) {
+        return res.status(400).json({ error: "action は 'approve' または 'reject' を指定してください" });
+      }
+
+      const assignment = await storage.getQuestAssignment(req.params.id);
+      if (!assignment) return res.status(404).json({ error: "割当が見つかりません" });
+      if (assignment.status !== "pending_review") {
+        return res.status(400).json({ error: "この割当は承認待ち状態ではありません" });
+      }
+
+      if (action === "approve") {
+        const quest = await storage.getQuest(assignment.questId);
+        const updated = await storage.updateQuestAssignment(assignment.id, {
+          status: "approved",
+          reviewNote: note || null,
+          reviewedBy: req.session.userId!,
+          reviewedAt: new Date(),
+          completedAt: new Date(),
+        });
+
+        // Award XP
+        if (quest) {
+          await storage.createCompletion({
+            questId: assignment.questId,
+            employeeId: assignment.employeeId,
+            xpEarned: quest.xpReward,
+          });
+        }
+
+        return res.json(updated);
+      }
+
+      // Reject: send back to active so user can resubmit
+      const updated = await storage.updateQuestAssignment(assignment.id, {
+        status: "rejected",
+        reviewNote: note || null,
+        reviewedBy: req.session.userId!,
+        reviewedAt: new Date(),
+      });
+      res.json(updated);
+    } catch (err) {
+      console.error("Error reviewing quest:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   app.post("/api/admin/quest-assignments", requireAdmin, async (req, res) => {
     try {
       const parsed = insertQuestAssignmentSchema.safeParse(req.body);
@@ -342,6 +569,37 @@ export async function registerRoutes(
       res.json({ message: "割当を削除しました" });
     } catch (err) {
       console.error("Error deleting quest assignment:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Resubmit rejected quest (user re-activates)
+  app.patch("/api/my/quests/:assignmentId/resubmit", requireAuth, async (req, res) => {
+    try {
+      const employee = await storage.getEmployeeByUserId(req.session.userId!);
+      if (!employee) return res.status(404).json({ error: "冒険者データが見つかりません" });
+
+      const assignment = await storage.getQuestAssignment(req.params.assignmentId);
+      if (!assignment || assignment.employeeId !== employee.id) {
+        return res.status(404).json({ error: "クエスト割当が見つかりません" });
+      }
+      if (assignment.status !== "rejected") {
+        return res.status(400).json({ error: "差戻しされたクエストのみ再提出できます" });
+      }
+
+      const updated = await storage.updateQuestAssignment(assignment.id, {
+        status: "active",
+        reviewNote: null,
+        reviewedBy: null,
+        reviewedAt: null,
+        submittedAt: null,
+        submissionNote: null,
+        submissionData: null,
+        submissionFiles: null,
+      });
+      res.json(updated);
+    } catch (err) {
+      console.error("Error resubmitting quest:", err);
       res.status(500).json({ error: "Internal server error" });
     }
   });

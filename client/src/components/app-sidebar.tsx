@@ -110,6 +110,7 @@ export function AppSidebar() {
               size="icon"
               className="h-7 w-7 text-sidebar-foreground/50 hover:text-sidebar-foreground"
               onClick={() => logout.mutate()}
+              disabled={logout.isPending}
               data-testid="button-logout"
             >
               <LogOut className="h-3 w-3" />

@@ -22,6 +22,8 @@ import {
   difficultyXP,
   skillCategories,
   skillCategoryLabels,
+  questSubmissionTypes,
+  questSubmissionTypeLabels,
 } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
@@ -41,11 +43,13 @@ export default function Quests() {
       difficulty: "normal",
       xpReward: 100,
       skillCategory: "technical",
+      submissionType: "button_only",
       isActive: true,
     },
   });
 
   const difficulty = form.watch("difficulty");
+  const submissionType = form.watch("submissionType");
 
   const createMutation = useMutation({
     mutationFn: async (data: InsertQuest) => {
@@ -186,6 +190,53 @@ export default function Quests() {
                       )}
                     />
                   </div>
+                  <FormField
+                    control={form.control}
+                    name="submissionType"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>完了形式</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value || "button_only"}>
+                          <FormControl>
+                            <SelectTrigger className="border-2">
+                              <SelectValue />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {questSubmissionTypes.map((t) => (
+                              <SelectItem key={t} value={t}>
+                                {questSubmissionTypeLabels[t]}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  {submissionType === "form_fill" && (
+                    <FormField
+                      control={form.control}
+                      name="formTemplate"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>フォームテンプレート (JSON)</FormLabel>
+                          <FormControl>
+                            <Textarea
+                              className="border-2 text-xs font-mono"
+                              placeholder={'[{"label":"成果概要","type":"textarea","required":true}]'}
+                              {...field}
+                              value={field.value || ""}
+                            />
+                          </FormControl>
+                          <p className="text-[10px] text-muted-foreground">
+                            例: [{'"label":"項目名","type":"text","required":true'}]
+                          </p>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
                   <FormField
                     control={form.control}
                     name="xpReward"
