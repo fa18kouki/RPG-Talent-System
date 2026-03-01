@@ -1,7 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertEmployeeSchema, insertQuestSchema, insertQuestCompletionSchema, insertSkillSchema, loginSchema, insertUserSchema, insertQuestAssignmentSchema, avatarConfigSchema, classLabels, skillCategoryLabels, difficultyLabels, type CharacterClass, type Employee, type Quest, type QuestAssignment } from "@shared/schema";
+import { insertEmployeeSchema, insertQuestSchema, insertQuestCompletionSchema, insertSkillSchema, loginSchema, insertUserSchema, insertQuestAssignmentSchema, avatarConfigSchema, classLabels, skillCategoryLabels, difficultyLabels, dailyChatTypeLabels, type CharacterClass, type DailyChatType, type Employee, type Quest, type QuestAssignment } from "@shared/schema";
 import bcrypt from "bcrypt";
 import multer from "multer";
 import path from "path";
@@ -673,6 +673,110 @@ export async function registerRoutes(
     }
   });
 
+  // === Daily Check-in (morning / evening) ===
+  app.get("/api/my/daily-checkin/status", requireAuth, async (req, res) => {
+    try {
+      const employee = await storage.getEmployeeByUserId(req.session.userId!);
+      if (!employee) return res.status(404).json({ error: "冒険者データが見つかりません" });
+
+      const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+      const morningLog = await storage.getDailyChatLog(employee.id, today, "morning");
+      const eveningLog = await storage.getDailyChatLog(employee.id, today, "evening");
+
+      res.json({
+        date: today,
+        morning: morningLog || null,
+        evening: eveningLog || null,
+      });
+    } catch (err) {
+      console.error("Error getting daily checkin status:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.post("/api/my/daily-checkin", requireAuth, async (req, res) => {
+    try {
+      const employee = await storage.getEmployeeByUserId(req.session.userId!);
+      if (!employee) return res.status(404).json({ error: "冒険者データが見つかりません" });
+
+      const { type, messages: chatMessages } = req.body;
+      if (!type || !["morning", "evening"].includes(type)) {
+        return res.status(400).json({ error: "typeは 'morning' または 'evening' を指定してください" });
+      }
+      if (!chatMessages || !Array.isArray(chatMessages) || chatMessages.length < 2) {
+        return res.status(400).json({ error: "会話が不足しています" });
+      }
+
+      const today = new Date().toISOString().slice(0, 10);
+      const existing = await storage.getDailyChatLog(employee.id, today, type);
+      if (existing) {
+        return res.status(400).json({ error: "本日のチェックインは既に完了しています" });
+      }
+
+      // Generate summary from messages
+      const assignments = await storage.getQuestAssignmentsByEmployee(employee.id);
+      const skills = await storage.getSkillsByEmployee(employee.id);
+      const completions = await storage.getCompletionsByEmployee(employee.id);
+      const allQuests = await storage.getQuests();
+      const questMap = new Map(allQuests.map(q => [q.id, q]));
+
+      const summary = generateDailySummary(employee, chatMessages, type as DailyChatType, assignments, questMap);
+
+      // Award XP for daily check-in (20 XP per check-in)
+      const xpAwarded = 20;
+      const { getLevelFromTotalXP } = await import("@shared/schema");
+      const newTotalXP = employee.totalXP + xpAwarded;
+      const levelInfo = getLevelFromTotalXP(newTotalXP);
+      await storage.updateEmployee(employee.id, {
+        totalXP: newTotalXP,
+        currentXP: levelInfo.currentXP,
+        level: levelInfo.level,
+      } as any);
+
+      const log = await storage.createDailyChatLog({
+        employeeId: employee.id,
+        date: today,
+        type: type as DailyChatType,
+        messages: JSON.stringify(chatMessages),
+        summary,
+        xpAwarded,
+      });
+
+      res.json({ log, xpAwarded });
+    } catch (err) {
+      console.error("Error in daily checkin:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // === Admin Daily Reports ===
+  app.get("/api/admin/daily-reports", requireAdmin, async (req, res) => {
+    try {
+      const dateFilter = typeof req.query.date === "string" ? req.query.date : undefined;
+      const allLogs = await storage.getAllDailyChatLogs();
+      const allEmployees = await storage.getEmployees();
+      const employeeMap = new Map(allEmployees.map(e => [e.id, e]));
+
+      let filteredLogs = allLogs;
+      if (dateFilter) {
+        filteredLogs = allLogs.filter(l => l.date === dateFilter);
+      }
+
+      const enriched = filteredLogs.map(log => ({
+        ...log,
+        employee: employeeMap.get(log.employeeId) || null,
+      }));
+
+      // Also provide a list of unique dates for filtering
+      const dates = [...new Set(allLogs.map(l => l.date))].sort().reverse();
+
+      res.json({ reports: enriched, dates });
+    } catch (err) {
+      console.error("Error getting daily reports:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // Resubmit rejected quest (user re-activates)
   app.patch("/api/my/quests/:assignmentId/resubmit", requireAuth, async (req, res) => {
     try {
@@ -893,4 +997,120 @@ function generateAIResponse(
     response += `\n\n✨ +10 XP 獲得！`;
   }
   return response;
+}
+
+function generateDailySummary(
+  employee: Employee,
+  messages: Array<{ role: string; content: string }>,
+  type: DailyChatType,
+  assignments: QuestAssignment[],
+  questMap: Map<string, Quest>,
+): string {
+  const className = classLabels[employee.characterClass as CharacterClass] || employee.characterClass;
+  const typeLabel = dailyChatTypeLabels[type];
+  const userMessages = messages.filter(m => m.role === "user").map(m => m.content);
+  const activeQuests = assignments.filter(a => a.status === "active");
+
+  let summary = `【${typeLabel}】${employee.name}（${className} Lv.${employee.level}）\n`;
+  summary += `日付: ${new Date().toLocaleDateString("ja-JP")}\n\n`;
+
+  // Extract key points from user messages
+  summary += `■ 本人の報告:\n`;
+  userMessages.forEach((msg, i) => {
+    // Truncate long messages
+    const truncated = msg.length > 200 ? msg.slice(0, 200) + "..." : msg;
+    summary += `  ${i + 1}. ${truncated}\n`;
+  });
+
+  // Add quest context
+  if (activeQuests.length > 0) {
+    summary += `\n■ 進行中クエスト (${activeQuests.length}件):\n`;
+    activeQuests.slice(0, 5).forEach(a => {
+      const q = questMap.get(a.questId);
+      if (q) {
+        summary += `  - ${q.title}`;
+        if (a.dueDate) {
+          const daysLeft = Math.ceil((new Date(a.dueDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+          summary += ` (残り${daysLeft}日)`;
+        }
+        summary += `\n`;
+      }
+    });
+  }
+
+  // Generate observations based on message content
+  const allText = userMessages.join(" ").toLowerCase();
+  summary += `\n■ AI所見:\n`;
+
+  if (allText.match(/困っ|大変|難し|むずかし|つらい|問題/)) {
+    summary += `  - 課題や困難を抱えている様子。フォローアップが必要な可能性あり。\n`;
+  }
+  if (allText.match(/完了|終わ|できた|達成|成功/)) {
+    summary += `  - タスクの進捗や達成感について報告あり。順調に進行中。\n`;
+  }
+  if (allText.match(/学|勉強|調査|研究|理解/)) {
+    summary += `  - 学習・スキルアップに意欲的。成長志向が見られる。\n`;
+  }
+  if (allText.match(/チーム|協力|相談|ミーティング|会議/)) {
+    summary += `  - チーム活動やコラボレーションに関する報告あり。\n`;
+  }
+  if (!allText.match(/困っ|大変|完了|学|チーム/)) {
+    summary += `  - 日常業務の振り返りを実施。特記事項なし。\n`;
+  }
+
+  if (type === "morning") {
+    summary += `  - 朝の目標設定・計画立てを実施。\n`;
+  } else {
+    summary += `  - 一日の業務を振り返り、記録を残した。\n`;
+  }
+
+  return summary;
+}
+
+export function generateDailyCheckinResponse(
+  employee: Employee,
+  type: DailyChatType,
+  assignments: QuestAssignment[],
+  questMap: Map<string, Quest>,
+  userMessage: string,
+  turnNumber: number,
+): string {
+  const className = classLabels[employee.characterClass as CharacterClass] || employee.characterClass;
+  const activeQuests = assignments.filter(a => a.status === "active");
+
+  if (type === "morning") {
+    if (turnNumber === 1) {
+      let greeting = `おはようございます、${employee.name}さん！${className}の朝が始まりましたね。\n\n`;
+      greeting += `今日はどんなことに取り組む予定ですか？目標や予定を教えてください。`;
+      if (activeQuests.length > 0) {
+        greeting += `\n\n📋 現在のアクティブクエスト:\n`;
+        activeQuests.slice(0, 3).forEach(a => {
+          const q = questMap.get(a.questId);
+          if (q) greeting += `  - ${q.title}\n`;
+        });
+      }
+      return greeting;
+    }
+    if (turnNumber === 2) {
+      return `なるほど、いい計画ですね！\n\n何か困っていることや、サポートが必要なことはありますか？クエストの進捗や、チームメンバーとの協力についても聞かせてください。`;
+    }
+    if (turnNumber >= 3) {
+      return `ありがとうございます！今日の計画がしっかり立てられましたね。\n\n✅ **朝のチェックイン完了！**\n「記録する」ボタンを押して、今日の計画を保存しましょう。夜の振り返りもお忘れなく！\n\n今日も一日、冒険を楽しんでください！ ⚔️`;
+    }
+  } else {
+    // Evening
+    if (turnNumber === 1) {
+      let greeting = `お疲れ様です、${employee.name}さん！今日一日どうでしたか？\n\n`;
+      greeting += `今日やったことや、印象に残ったことを教えてください。`;
+      return greeting;
+    }
+    if (turnNumber === 2) {
+      return `詳しく教えてくれてありがとうございます！\n\n今日の中で、特に学んだことや、明日に活かしたいことはありますか？また、困っていることがあれば聞かせてください。`;
+    }
+    if (turnNumber >= 3) {
+      return `素晴らしい振り返りですね、${employee.name}さん！\n\n✅ **夜のチェックイン完了！**\n「記録する」ボタンを押して、今日の振り返りを保存しましょう。\n\nお疲れ様でした。しっかり休んで、明日も冒険を続けましょう！ 🌙`;
+    }
+  }
+
+  return `ありがとうございます。引き続き、今日のことを教えてください。`;
 }

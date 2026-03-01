@@ -22,6 +22,7 @@ import AdminUsers from "@/pages/admin-users";
 import UserHome from "@/pages/user-home";
 import QuestHistory from "@/pages/quest-history";
 import AdminQuestAssignments from "@/pages/admin-quest-assignments";
+import AdminDailyReports from "@/pages/admin-daily-reports";
 import type { Employee, AvatarConfig } from "@shared/schema";
 
 function AdminRoute({ component: Component }: { component: React.ComponentType }) {
@@ -43,6 +44,9 @@ function AdminRouter() {
       </Route>
       <Route path="/admin/quest-assignments">
         <AdminRoute component={AdminQuestAssignments} />
+      </Route>
+      <Route path="/admin/daily-reports">
+        <AdminRoute component={AdminDailyReports} />
       </Route>
       <Route component={NotFound} />
     </Switch>

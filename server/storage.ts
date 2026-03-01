@@ -6,7 +6,8 @@ import {
   type User, type InsertUser,
   type QuestAssignment, type InsertQuestAssignment,
   type ChatMessage, type InsertChatMessage,
-  employees, skills, quests, questCompletions, users, questAssignments, chatMessages,
+  type DailyChatLog, type InsertDailyChatLog,
+  employees, skills, quests, questCompletions, users, questAssignments, chatMessages, dailyChatLogs,
   getLevelFromTotalXP,
 } from "@shared/schema";
 import { db } from "./db";
@@ -49,6 +50,11 @@ export interface IStorage {
   getChatMessagesByEmployee(employeeId: string): Promise<ChatMessage[]>;
   createChatMessage(data: InsertChatMessage): Promise<ChatMessage>;
   getChatMessageCountToday(employeeId: string): Promise<number>;
+
+  getDailyChatLogsByEmployee(employeeId: string): Promise<DailyChatLog[]>;
+  getDailyChatLog(employeeId: string, date: string, type: string): Promise<DailyChatLog | undefined>;
+  createDailyChatLog(data: InsertDailyChatLog): Promise<DailyChatLog>;
+  getAllDailyChatLogs(): Promise<DailyChatLog[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -220,6 +226,32 @@ export class DatabaseStorage implements IStorage {
         eq(chatMessages.role, "user"),
       ));
     return result.filter(m => m.createdAt && new Date(m.createdAt) >= today).length;
+  }
+
+  async getDailyChatLogsByEmployee(employeeId: string): Promise<DailyChatLog[]> {
+    return db.select().from(dailyChatLogs)
+      .where(eq(dailyChatLogs.employeeId, employeeId))
+      .orderBy(desc(dailyChatLogs.createdAt));
+  }
+
+  async getDailyChatLog(employeeId: string, date: string, type: string): Promise<DailyChatLog | undefined> {
+    const [log] = await db.select().from(dailyChatLogs)
+      .where(and(
+        eq(dailyChatLogs.employeeId, employeeId),
+        eq(dailyChatLogs.date, date),
+        eq(dailyChatLogs.type, type),
+      ));
+    return log;
+  }
+
+  async createDailyChatLog(data: InsertDailyChatLog): Promise<DailyChatLog> {
+    const [log] = await db.insert(dailyChatLogs).values(data).returning();
+    return log;
+  }
+
+  async getAllDailyChatLogs(): Promise<DailyChatLog[]> {
+    return db.select().from(dailyChatLogs)
+      .orderBy(desc(dailyChatLogs.createdAt));
   }
 }
 
