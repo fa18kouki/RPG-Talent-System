@@ -17,9 +17,16 @@ A gamified human resource development platform that represents employees as RPG 
 - **Admin**: Can access all features including user management, create/modify employees, quests, completions
 - **User**: Can view employees, quests, dashboard (read-only access to main features)
 - **Login**: Email + password authentication
-- **Default accounts** (seeded):
-  - Admin: admin@questhr.com / admin123
-  - User: user@questhr.com / user123
+- **Default accounts** (seeded, all @example.com):
+  - Admin: admin@example.com / admin123
+  - Admin: kobayashi@example.com / user123 (小林 さくら)
+  - User: tanaka@example.com / user123 (田中 太郎)
+  - User: sato@example.com / user123 (佐藤 花子)
+  - User: suzuki@example.com / user123 (鈴木 一郎)
+  - User: yamada@example.com / user123 (山田 美咲)
+  - User: ito@example.com / user123 (伊藤 健太)
+  - User: watanabe@example.com / user123 (渡辺 結衣)
+  - User: nakamura@example.com / user123 (中村 大輔)
 
 ## Visual Style
 
@@ -63,7 +70,7 @@ A gamified human resource development platform that represents employees as RPG 
 - `server/storage.ts` - Database storage interface (including user CRUD)
 - `server/routes.ts` - REST API endpoints with auth middleware (requireAuth, requireAdmin), Gemini-powered chat
 - `server/index.ts` - Express server with session middleware setup
-- `server/seed.ts` - Seed data with default users, 5 employees, skills, 8 quests, sample completions
+- `server/seed.ts` - Seed data with 9 users (all @example.com), 8 employees, skills, 11 quests, quest assignments (various statuses), completions, daily chat logs
 - `server/replit_integrations/` - Gemini AI integration modules (chat, image, batch)
 - `client/src/hooks/use-auth.ts` - Authentication hook (login, logout, user state)
 - `client/src/pages/login.tsx` - Login page
