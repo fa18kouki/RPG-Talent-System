@@ -120,6 +120,10 @@ export const employees = pgTable("employees", {
   totalXP: integer("total_xp").notNull().default(0),
   avatarUrl: text("avatar_url"),
   avatarConfig: text("avatar_config"),
+  bio: text("bio"),
+  hobbies: text("hobbies"),           // JSON array of strings
+  specialties: text("specialties"),    // JSON array of strings
+  motto: text("motto"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

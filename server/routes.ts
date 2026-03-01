@@ -198,6 +198,30 @@ export async function registerRoutes(
     res.status(201).json(employee);
   });
 
+  // === Employee Profiles (for directory) ===
+  app.get("/api/profiles", requireAuth, async (_req, res) => {
+    try {
+      const allEmployees = await storage.getEmployees();
+      const allSkills = await storage.getSkills();
+      const allCompletions = await storage.getCompletions();
+
+      const profiles = allEmployees.map(emp => {
+        const empSkills = allSkills.filter(s => s.employeeId === emp.id);
+        const empCompletions = allCompletions.filter(c => c.employeeId === emp.id);
+        return {
+          ...emp,
+          skills: empSkills,
+          completionCount: empCompletions.length,
+        };
+      });
+
+      res.json(profiles);
+    } catch (err) {
+      console.error("Error getting profiles:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // === Skills ===
 
   app.get("/api/skills", requireAuth, async (_req, res) => {
@@ -451,6 +475,26 @@ export async function registerRoutes(
     } catch (err) {
       console.error("Error completing quest:", err);
       res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Update my profile (bio, hobbies, specialties, motto)
+  app.patch("/api/my/profile", requireAuth, async (req, res) => {
+    try {
+      const employee = await storage.getEmployeeByUserId(req.session.userId!);
+      if (!employee) return res.status(404).json({ error: "冒険者データが見つかりません" });
+
+      const updateData: Record<string, unknown> = {};
+      if (req.body.bio !== undefined) updateData.bio = req.body.bio || null;
+      if (req.body.hobbies !== undefined) updateData.hobbies = req.body.hobbies ? JSON.stringify(req.body.hobbies) : null;
+      if (req.body.specialties !== undefined) updateData.specialties = req.body.specialties ? JSON.stringify(req.body.specialties) : null;
+      if (req.body.motto !== undefined) updateData.motto = req.body.motto || null;
+
+      const updated = await storage.updateEmployee(employee.id, updateData as any);
+      res.json(updated);
+    } catch (err) {
+      console.error("Error updating profile:", err);
+      res.status(500).json({ error: "プロフィールの更新に失敗しました" });
     }
   });
 
