@@ -120,6 +120,10 @@ export const employees = pgTable("employees", {
   totalXP: integer("total_xp").notNull().default(0),
   avatarUrl: text("avatar_url"),
   avatarConfig: text("avatar_config"),
+  bio: text("bio"),
+  hobbies: text("hobbies"),           // JSON array of strings
+  specialties: text("specialties"),    // JSON array of strings
+  motto: text("motto"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -141,6 +145,7 @@ export const quests = pgTable("quests", {
   skillCategory: text("skill_category").notNull().$type<SkillCategory>(),
   submissionType: text("submission_type").notNull().$type<QuestSubmissionType>().default("button_only"),
   formTemplate: text("form_template"), // JSON: [{label, type, required}] for form_fill
+  requiresDeliverables: boolean("requires_deliverables").notNull().default(false),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at").defaultNow(),
 });

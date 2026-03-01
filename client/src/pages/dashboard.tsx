@@ -1,10 +1,24 @@
 import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { CharacterCard } from "@/components/character-card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Users, ScrollText, Trophy, TrendingUp, Sparkles } from "lucide-react";
-import type { Employee, Skill, Quest, QuestCompletion } from "@shared/schema";
-import { getLevelFromTotalXP } from "@shared/schema";
+import { Users, ScrollText, Trophy, TrendingUp, Sparkles, AlertTriangle, Clock, CheckCircle2, Hourglass } from "lucide-react";
+import type { Employee, Skill, Quest, QuestCompletion, QuestAssignment } from "@shared/schema";
+import { getLevelFromTotalXP, difficultyLabels } from "@shared/schema";
+import { getQueryFn } from "@/lib/queryClient";
+
+type EnrichedAssignment = QuestAssignment & {
+  quest: Quest | null;
+  employee: Employee | null;
+};
+
+type DashboardSummary = {
+  todayCompleted: EnrichedAssignment[];
+  overdueAssignments: EnrichedAssignment[];
+  pendingReviewCount: number;
+  date: string;
+};
 
 export default function Dashboard() {
   const { data: employees, isLoading: loadingEmployees } = useQuery<Employee[]>({
@@ -21,6 +35,11 @@ export default function Dashboard() {
 
   const { data: allSkills } = useQuery<Skill[]>({
     queryKey: ["/api/skills"],
+  });
+
+  const { data: dashboardSummary, isLoading: loadingSummary } = useQuery<DashboardSummary>({
+    queryKey: ["/api/admin/dashboard-summary"],
+    queryFn: getQueryFn({ on401: "throw" }),
   });
 
   const isLoading = loadingEmployees || loadingQuests || loadingCompletions;
@@ -106,6 +125,115 @@ export default function Dashboard() {
                 </Card>
               ))}
         </div>
+
+        {/* Alert Sections: Overdue & Pending Review */}
+        {!loadingSummary && dashboardSummary && (
+          <>
+            {/* Overdue Assignments */}
+            {dashboardSummary.overdueAssignments.length > 0 && (
+              <Card className="p-4 border-2 border-destructive/50 bg-destructive/5">
+                <div className="flex items-center gap-2 mb-3">
+                  <AlertTriangle className="h-5 w-5 text-destructive" />
+                  <h2 className="text-sm font-bold text-destructive">期限超過の割当</h2>
+                  <Badge variant="destructive" className="text-[10px] ml-auto">
+                    {dashboardSummary.overdueAssignments.length}件
+                  </Badge>
+                </div>
+                <div className="space-y-2">
+                  {dashboardSummary.overdueAssignments.map(a => {
+                    const dueDate = a.dueDate ? new Date(a.dueDate) : null;
+                    const daysOverdue = dueDate
+                      ? Math.floor((Date.now() - dueDate.getTime()) / (1000 * 60 * 60 * 24))
+                      : 0;
+
+                    return (
+                      <div key={a.id} className="flex items-center gap-3 p-2 bg-background/50 border border-destructive/20">
+                        <AlertTriangle className="h-4 w-4 text-destructive shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs font-semibold truncate">{a.quest?.title || "不明"}</span>
+                            {a.quest && (
+                              <Badge variant="secondary" className="text-[9px]">
+                                {difficultyLabels[a.quest.difficulty]}
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <Users className="h-3 w-3 text-muted-foreground" />
+                            <span className="text-[10px] text-muted-foreground">{a.employee?.name || "不明"}</span>
+                            <span className="text-[10px] text-destructive font-bold ml-auto">
+                              {daysOverdue > 0 ? `${daysOverdue}日超過` : "本日期限"}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </Card>
+            )}
+
+            {/* Pending Review Summary */}
+            {dashboardSummary.pendingReviewCount > 0 && (
+              <Card className="p-4 border-2 border-amber-400/50 bg-amber-50/30 dark:bg-amber-500/5">
+                <div className="flex items-center gap-2">
+                  <Hourglass className="h-5 w-5 text-amber-500" />
+                  <h2 className="text-sm font-bold">承認待ちの提出</h2>
+                  <Badge className="text-[10px] bg-amber-100 text-amber-700 border-amber-300 ml-auto">
+                    {dashboardSummary.pendingReviewCount}件
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  クエスト割当管理ページで確認・承認してください。
+                </p>
+              </Card>
+            )}
+          </>
+        )}
+
+        {/* Today's Completed Quests (Daily Report) */}
+        {!loadingSummary && dashboardSummary && dashboardSummary.todayCompleted.length > 0 && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+              <h2 className="text-lg font-semibold">本日の完了クエスト</h2>
+              <Badge variant="outline" className="text-[10px] border-2 ml-auto">
+                {dashboardSummary.date} / {dashboardSummary.todayCompleted.length}件
+              </Badge>
+            </div>
+            <div className="space-y-2">
+              {dashboardSummary.todayCompleted.map(a => (
+                <Card key={a.id} className="p-3 border-2 border-emerald-400/30 bg-emerald-50/30 dark:bg-emerald-500/5">
+                  <div className="flex items-center gap-3">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-semibold truncate">{a.quest?.title || "不明"}</span>
+                        {a.quest && (
+                          <Badge variant="secondary" className="text-[9px]">
+                            {difficultyLabels[a.quest.difficulty]}
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <Users className="h-3 w-3 text-muted-foreground" />
+                        <span className="text-[10px] text-muted-foreground">{a.employee?.name || "不明"}</span>
+                        {a.completedAt && (
+                          <span className="text-[10px] text-muted-foreground ml-auto">
+                            {new Date(a.completedAt).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-mono font-bold text-chart-4 shrink-0">
+                      +{a.quest?.xpReward || 0} XP
+                    </span>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="grid lg:grid-cols-5 gap-6">
           <div className="lg:col-span-3 space-y-4">

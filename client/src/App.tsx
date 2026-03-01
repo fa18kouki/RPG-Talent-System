@@ -8,9 +8,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { AIChat } from "@/components/ai-chat";
 import { useAuth } from "@/hooks/use-auth";
-import { Loader2, LogOut, Shield, Swords, ScrollText, MessageCircle } from "lucide-react";
+import { Loader2, LogOut, Shield, Swords, ScrollText, MessageCircle, User, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/dashboard";
@@ -21,6 +20,9 @@ import Login from "@/pages/login";
 import AdminUsers from "@/pages/admin-users";
 import UserHome from "@/pages/user-home";
 import QuestHistory from "@/pages/quest-history";
+import MyProfile from "@/pages/my-profile";
+import AIChatPage from "@/pages/ai-chat-page";
+import ProfileDirectory from "@/pages/profile-directory";
 import AdminQuestAssignments from "@/pages/admin-quest-assignments";
 import AdminDailyReports from "@/pages/admin-daily-reports";
 import type { Employee, AvatarConfig } from "@shared/schema";
@@ -39,6 +41,7 @@ function AdminRouter() {
       <Route path="/employees" component={Employees} />
       <Route path="/employees/:id" component={EmployeeDetail} />
       <Route path="/quests" component={Quests} />
+      <Route path="/profiles" component={ProfileDirectory} />
       <Route path="/admin/users">
         <AdminRoute component={AdminUsers} />
       </Route>
@@ -77,24 +80,18 @@ function AdminApp() {
   );
 }
 
-type UserTab = "home" | "history";
+type UserTab = "home" | "history" | "profile" | "chat" | "directory";
 
 function UserApp() {
   const { user, logout } = useAuth();
   const [activeTab, setActiveTab] = useState<UserTab>("home");
 
-  const { data: employee } = useQuery<Employee>({
-    queryKey: ["/api/my/employee"],
-    queryFn: getQueryFn({ on401: "throw" }),
-  });
-
-  const avatarConfig: AvatarConfig | null = employee?.avatarConfig
-    ? JSON.parse(employee.avatarConfig)
-    : null;
-
   const tabs: { id: UserTab; label: string; icon: typeof Swords }[] = [
     { id: "home", label: "クエスト", icon: Swords },
-    { id: "history", label: "冒険の記録", icon: ScrollText },
+    { id: "chat", label: "AIチャット", icon: MessageCircle },
+    { id: "profile", label: "プロフィール", icon: User },
+    { id: "directory", label: "名鑑", icon: Users },
+    { id: "history", label: "記録", icon: ScrollText },
   ];
 
   return (
@@ -123,7 +120,7 @@ function UserApp() {
       </header>
 
       {/* Tab Navigation */}
-      <div className="flex border-b-2 bg-card">
+      <div className="flex border-b-2 bg-card overflow-x-auto">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -131,7 +128,7 @@ function UserApp() {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-mono font-bold transition-colors border-b-2 -mb-[2px] ${
+              className={`flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-4 py-2.5 text-[10px] sm:text-xs font-mono font-bold transition-colors border-b-2 -mb-[2px] whitespace-nowrap shrink-0 ${
                 isActive
                   ? "border-primary text-primary bg-primary/5"
                   : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"
@@ -147,10 +144,10 @@ function UserApp() {
       <main className="flex-1 overflow-auto">
         {activeTab === "home" && <UserHome />}
         {activeTab === "history" && <QuestHistory />}
+        {activeTab === "profile" && <MyProfile />}
+        {activeTab === "chat" && <AIChatPage />}
+        {activeTab === "directory" && <ProfileDirectory />}
       </main>
-
-      {/* AI Chat Floating Widget */}
-      {employee && <AIChat employee={employee} avatarConfig={avatarConfig} />}
     </div>
   );
 }

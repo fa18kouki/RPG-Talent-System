@@ -198,6 +198,30 @@ export async function registerRoutes(
     res.status(201).json(employee);
   });
 
+  // === Employee Profiles (for directory) ===
+  app.get("/api/profiles", requireAuth, async (_req, res) => {
+    try {
+      const allEmployees = await storage.getEmployees();
+      const allSkills = await storage.getSkills();
+      const allCompletions = await storage.getCompletions();
+
+      const profiles = allEmployees.map(emp => {
+        const empSkills = allSkills.filter(s => s.employeeId === emp.id);
+        const empCompletions = allCompletions.filter(c => c.employeeId === emp.id);
+        return {
+          ...emp,
+          skills: empSkills,
+          completionCount: empCompletions.length,
+        };
+      });
+
+      res.json(profiles);
+    } catch (err) {
+      console.error("Error getting profiles:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // === Skills ===
 
   app.get("/api/skills", requireAuth, async (_req, res) => {
@@ -229,6 +253,30 @@ export async function registerRoutes(
     if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
     const quest = await storage.createQuest(parsed.data);
     res.status(201).json(quest);
+  });
+
+  app.patch("/api/quests/:id", requireAdmin, async (req, res) => {
+    try {
+      const existing = await storage.getQuest(req.params.id);
+      if (!existing) return res.status(404).json({ error: "クエストが見つかりません" });
+
+      const updateData: Record<string, unknown> = {};
+      if (req.body.title !== undefined) updateData.title = req.body.title;
+      if (req.body.description !== undefined) updateData.description = req.body.description;
+      if (req.body.difficulty !== undefined) updateData.difficulty = req.body.difficulty;
+      if (req.body.xpReward !== undefined) updateData.xpReward = req.body.xpReward;
+      if (req.body.skillCategory !== undefined) updateData.skillCategory = req.body.skillCategory;
+      if (req.body.submissionType !== undefined) updateData.submissionType = req.body.submissionType;
+      if (req.body.formTemplate !== undefined) updateData.formTemplate = req.body.formTemplate;
+      if (req.body.requiresDeliverables !== undefined) updateData.requiresDeliverables = req.body.requiresDeliverables;
+      if (req.body.isActive !== undefined) updateData.isActive = req.body.isActive;
+
+      const updated = await storage.updateQuest(req.params.id, updateData as any);
+      res.json(updated);
+    } catch (err) {
+      console.error("Error updating quest:", err);
+      res.status(500).json({ error: "クエストの更新に失敗しました" });
+    }
   });
 
   // === Completions ===
@@ -427,6 +475,26 @@ export async function registerRoutes(
     } catch (err) {
       console.error("Error completing quest:", err);
       res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Update my profile (bio, hobbies, specialties, motto)
+  app.patch("/api/my/profile", requireAuth, async (req, res) => {
+    try {
+      const employee = await storage.getEmployeeByUserId(req.session.userId!);
+      if (!employee) return res.status(404).json({ error: "冒険者データが見つかりません" });
+
+      const updateData: Record<string, unknown> = {};
+      if (req.body.bio !== undefined) updateData.bio = req.body.bio || null;
+      if (req.body.hobbies !== undefined) updateData.hobbies = req.body.hobbies ? JSON.stringify(req.body.hobbies) : null;
+      if (req.body.specialties !== undefined) updateData.specialties = req.body.specialties ? JSON.stringify(req.body.specialties) : null;
+      if (req.body.motto !== undefined) updateData.motto = req.body.motto || null;
+
+      const updated = await storage.updateEmployee(employee.id, updateData as any);
+      res.json(updated);
+    } catch (err) {
+      console.error("Error updating profile:", err);
+      res.status(500).json({ error: "プロフィールの更新に失敗しました" });
     }
   });
 
@@ -773,6 +841,59 @@ export async function registerRoutes(
       res.json({ reports: enriched, dates });
     } catch (err) {
       console.error("Error getting daily reports:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // === Admin Dashboard Summary ===
+  app.get("/api/admin/dashboard-summary", requireAdmin, async (_req, res) => {
+    try {
+      const assignments = await storage.getQuestAssignments();
+      const allQuests = await storage.getQuests();
+      const allEmployees = await storage.getEmployees();
+      const questMap = new Map(allQuests.map(q => [q.id, q]));
+      const employeeMap = new Map(allEmployees.map(e => [e.id, e]));
+
+      const today = new Date().toISOString().slice(0, 10);
+      const now = new Date();
+
+      // Completed quests today (daily report)
+      const todayCompleted = assignments
+        .filter(a => {
+          if (a.status !== "completed" && a.status !== "approved") return false;
+          if (!a.completedAt) return false;
+          return new Date(a.completedAt).toISOString().slice(0, 10) === today;
+        })
+        .map(a => ({
+          ...a,
+          quest: questMap.get(a.questId) || null,
+          employee: employeeMap.get(a.employeeId) || null,
+        }));
+
+      // Overdue assignments (active quests past due date)
+      const overdueAssignments = assignments
+        .filter(a => {
+          if (a.status !== "active") return false;
+          if (!a.dueDate) return false;
+          return new Date(a.dueDate) < now;
+        })
+        .map(a => ({
+          ...a,
+          quest: questMap.get(a.questId) || null,
+          employee: employeeMap.get(a.employeeId) || null,
+        }));
+
+      // Pending review count
+      const pendingReviewCount = assignments.filter(a => a.status === "pending_review").length;
+
+      res.json({
+        todayCompleted,
+        overdueAssignments,
+        pendingReviewCount,
+        date: today,
+      });
+    } catch (err) {
+      console.error("Error getting dashboard summary:", err);
       res.status(500).json({ error: "Internal server error" });
     }
   });

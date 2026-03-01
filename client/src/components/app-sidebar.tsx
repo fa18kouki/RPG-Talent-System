@@ -1,4 +1,4 @@
-import { Sword, Users, ScrollText, LayoutDashboard, Shield, Sparkles, Crown, LogOut, ClipboardList, MessageCircle } from "lucide-react";
+import { Sword, Users, ScrollText, LayoutDashboard, Shield, Sparkles, Crown, LogOut, ClipboardList, MessageCircle, BookUser } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import {
@@ -19,6 +19,7 @@ const menuItems = [
   { title: "ダッシュボード", url: "/", icon: LayoutDashboard },
   { title: "冒険者一覧", url: "/employees", icon: Users },
   { title: "クエストボード", url: "/quests", icon: ScrollText },
+  { title: "冒険者名鑑", url: "/profiles", icon: BookUser },
 ];
 
 const adminMenuItems = [
