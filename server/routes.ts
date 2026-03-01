@@ -231,6 +231,30 @@ export async function registerRoutes(
     res.status(201).json(quest);
   });
 
+  app.patch("/api/quests/:id", requireAdmin, async (req, res) => {
+    try {
+      const existing = await storage.getQuest(req.params.id);
+      if (!existing) return res.status(404).json({ error: "クエストが見つかりません" });
+
+      const updateData: Record<string, unknown> = {};
+      if (req.body.title !== undefined) updateData.title = req.body.title;
+      if (req.body.description !== undefined) updateData.description = req.body.description;
+      if (req.body.difficulty !== undefined) updateData.difficulty = req.body.difficulty;
+      if (req.body.xpReward !== undefined) updateData.xpReward = req.body.xpReward;
+      if (req.body.skillCategory !== undefined) updateData.skillCategory = req.body.skillCategory;
+      if (req.body.submissionType !== undefined) updateData.submissionType = req.body.submissionType;
+      if (req.body.formTemplate !== undefined) updateData.formTemplate = req.body.formTemplate;
+      if (req.body.requiresDeliverables !== undefined) updateData.requiresDeliverables = req.body.requiresDeliverables;
+      if (req.body.isActive !== undefined) updateData.isActive = req.body.isActive;
+
+      const updated = await storage.updateQuest(req.params.id, updateData as any);
+      res.json(updated);
+    } catch (err) {
+      console.error("Error updating quest:", err);
+      res.status(500).json({ error: "クエストの更新に失敗しました" });
+    }
+  });
+
   // === Completions ===
 
   app.get("/api/completions", requireAuth, async (_req, res) => {
@@ -773,6 +797,59 @@ export async function registerRoutes(
       res.json({ reports: enriched, dates });
     } catch (err) {
       console.error("Error getting daily reports:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // === Admin Dashboard Summary ===
+  app.get("/api/admin/dashboard-summary", requireAdmin, async (_req, res) => {
+    try {
+      const assignments = await storage.getQuestAssignments();
+      const allQuests = await storage.getQuests();
+      const allEmployees = await storage.getEmployees();
+      const questMap = new Map(allQuests.map(q => [q.id, q]));
+      const employeeMap = new Map(allEmployees.map(e => [e.id, e]));
+
+      const today = new Date().toISOString().slice(0, 10);
+      const now = new Date();
+
+      // Completed quests today (daily report)
+      const todayCompleted = assignments
+        .filter(a => {
+          if (a.status !== "completed" && a.status !== "approved") return false;
+          if (!a.completedAt) return false;
+          return new Date(a.completedAt).toISOString().slice(0, 10) === today;
+        })
+        .map(a => ({
+          ...a,
+          quest: questMap.get(a.questId) || null,
+          employee: employeeMap.get(a.employeeId) || null,
+        }));
+
+      // Overdue assignments (active quests past due date)
+      const overdueAssignments = assignments
+        .filter(a => {
+          if (a.status !== "active") return false;
+          if (!a.dueDate) return false;
+          return new Date(a.dueDate) < now;
+        })
+        .map(a => ({
+          ...a,
+          quest: questMap.get(a.questId) || null,
+          employee: employeeMap.get(a.employeeId) || null,
+        }));
+
+      // Pending review count
+      const pendingReviewCount = assignments.filter(a => a.status === "pending_review").length;
+
+      res.json({
+        todayCompleted,
+        overdueAssignments,
+        pendingReviewCount,
+        date: today,
+      });
+    } catch (err) {
+      console.error("Error getting dashboard summary:", err);
       res.status(500).json({ error: "Internal server error" });
     }
   });

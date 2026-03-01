@@ -26,6 +26,7 @@ export interface IStorage {
   getQuests(): Promise<Quest[]>;
   getQuest(id: string): Promise<Quest | undefined>;
   createQuest(data: InsertQuest): Promise<Quest>;
+  updateQuest(id: string, data: Partial<InsertQuest>): Promise<Quest | undefined>;
 
   getCompletions(): Promise<QuestCompletion[]>;
   getCompletionsByEmployee(employeeId: string): Promise<QuestCompletion[]>;
@@ -101,6 +102,11 @@ export class DatabaseStorage implements IStorage {
 
   async createQuest(data: InsertQuest): Promise<Quest> {
     const [quest] = await db.insert(quests).values(data).returning();
+    return quest;
+  }
+
+  async updateQuest(id: string, data: Partial<InsertQuest>): Promise<Quest | undefined> {
+    const [quest] = await db.update(quests).set(data).where(eq(quests.id, id)).returning();
     return quest;
   }
 

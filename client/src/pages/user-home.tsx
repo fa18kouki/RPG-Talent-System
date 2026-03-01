@@ -19,10 +19,21 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from "@/components/ui/alert-dialog";
 import { DailyCheckinQuest } from "@/components/daily-checkin";
 import {
   Sparkles, Star, Flame, Crown, CheckCircle2, Clock, Pencil, Scroll,
   Upload, FileText, Send, RotateCcw, AlertTriangle, Hourglass, ThumbsUp, ThumbsDown,
+  ShieldAlert,
 } from "lucide-react";
 import type { Employee, Quest, QuestAssignment, AvatarConfig, QuestSubmissionType, QuestAssignmentStatus } from "@shared/schema";
 import {
@@ -57,6 +68,16 @@ export default function UserHome() {
   const [uploadedFiles, setUploadedFiles] = useState<Array<{ name: string; path: string }>>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Confirmation popup state
+  const [confirmDialog, setConfirmDialog] = useState(false);
+  const [confirmTarget, setConfirmTarget] = useState<{
+    assignmentId: string;
+    note?: string;
+    formData?: Record<string, string>;
+    quest: Quest | null;
+    isButtonOnly: boolean;
+  } | null>(null);
+
   const { data: employee, isLoading: empLoading } = useQuery<Employee>({
     queryKey: ["/api/my/employee"],
     queryFn: getQueryFn({ on401: "throw" }),
@@ -75,16 +96,20 @@ export default function UserHome() {
     onSuccess: (_data, vars) => {
       queryClient.invalidateQueries({ queryKey: ["/api/my/quests"] });
       queryClient.invalidateQueries({ queryKey: ["/api/my/employee"] });
-      const quest = submitDialog?.quest;
-      if (quest?.submissionType === "button_only") {
+      const isButtonOnly = confirmTarget?.isButtonOnly;
+      if (isButtonOnly) {
         toast({ title: "クエスト完了！XPを獲得しました" });
       } else {
         toast({ title: "クエストを提出しました。管理者の承認をお待ちください" });
       }
       closeSubmitDialog();
+      setConfirmDialog(false);
+      setConfirmTarget(null);
     },
     onError: () => {
       toast({ title: "提出に失敗しました", variant: "destructive" });
+      setConfirmDialog(false);
+      setConfirmTarget(null);
     },
   });
 
@@ -138,6 +163,27 @@ export default function UserHome() {
     setSubmitNote("");
     setFormValues({});
     setUploadedFiles([]);
+  }
+
+  // Show confirmation popup before actual submission
+  function requestSubmit(assignmentId: string, quest: Quest | null, isButtonOnly: boolean, note?: string, formData?: Record<string, string>) {
+    setConfirmTarget({
+      assignmentId,
+      note,
+      formData,
+      quest,
+      isButtonOnly,
+    });
+    setConfirmDialog(true);
+  }
+
+  function executeSubmit() {
+    if (!confirmTarget) return;
+    submitMutation.mutate({
+      assignmentId: confirmTarget.assignmentId,
+      note: confirmTarget.note,
+      formData: confirmTarget.formData,
+    });
   }
 
   const avatarConfig: AvatarConfig | null = employee?.avatarConfig
@@ -343,6 +389,12 @@ export default function UserHome() {
                           {subType === "button_only" && <Send className="h-2.5 w-2.5 mr-0.5" />}
                           {questSubmissionTypeLabels[subType]}
                         </Badge>
+                        {a.quest.requiresDeliverables && (
+                          <Badge variant="outline" className="text-[9px] sm:text-[10px] border-2 border-orange-300 text-orange-600">
+                            <ShieldAlert className="h-2.5 w-2.5 mr-0.5" />
+                            成果物必須
+                          </Badge>
+                        )}
                         <span className="text-[9px] font-mono font-bold text-chart-4">+{a.quest.xpReward} XP</span>
                       </div>
                       {dueDate && (
@@ -358,7 +410,7 @@ export default function UserHome() {
                     <Button
                       size="sm"
                       onClick={() => subType === "button_only"
-                        ? submitMutation.mutate({ assignmentId: a.id })
+                        ? requestSubmit(a.id, a.quest, true)
                         : openSubmitDialog(a)
                       }
                       disabled={submitMutation.isPending}
@@ -421,7 +473,12 @@ export default function UserHome() {
           <div className="space-y-4 py-2">
             {submitDialog?.quest?.submissionType === "file_upload" && (
               <div className="space-y-2">
-                <Label className="text-xs font-mono">成果物ファイル</Label>
+                <Label className="text-xs font-mono flex items-center gap-1">
+                  成果物ファイル
+                  {submitDialog.quest.requiresDeliverables && (
+                    <span className="text-destructive">*</span>
+                  )}
+                </Label>
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -487,7 +544,15 @@ export default function UserHome() {
             )}
 
             <div className="space-y-1">
-              <Label className="text-xs font-mono">コメント（任意）</Label>
+              <Label className="text-xs font-mono flex items-center gap-1">
+                コメント
+                {submitDialog?.quest?.requiresDeliverables &&
+                 submitDialog?.quest?.submissionType !== "file_upload" &&
+                 submitDialog?.quest?.submissionType !== "form_fill"
+                  ? <span className="text-destructive">*</span>
+                  : <span className="text-muted-foreground">（任意）</span>
+                }
+              </Label>
               <Textarea
                 value={submitNote}
                 onChange={e => setSubmitNote(e.target.value)}
@@ -504,11 +569,32 @@ export default function UserHome() {
             <Button
               onClick={() => {
                 if (!submitDialog) return;
-                submitMutation.mutate({
-                  assignmentId: submitDialog.id,
-                  note: submitNote || undefined,
-                  formData: Object.keys(formValues).length > 0 ? formValues : undefined,
-                });
+                const quest = submitDialog.quest;
+
+                // Validate deliverables requirement
+                if (quest?.requiresDeliverables) {
+                  if (quest.submissionType === "file_upload" && uploadedFiles.length === 0) {
+                    toast({ title: "成果物ファイルを添付してください", variant: "destructive" });
+                    return;
+                  }
+                  if (quest.submissionType === "form_fill") {
+                    const requiredFields = formTemplate.filter(f => f.required);
+                    const missing = requiredFields.filter(f => !formValues[f.label]?.trim());
+                    if (missing.length > 0) {
+                      toast({ title: `必須項目「${missing[0].label}」を入力してください`, variant: "destructive" });
+                      return;
+                    }
+                  }
+                }
+
+                // Show confirmation popup instead of direct submit
+                requestSubmit(
+                  submitDialog.id,
+                  quest,
+                  false,
+                  submitNote || undefined,
+                  Object.keys(formValues).length > 0 ? formValues : undefined,
+                );
               }}
               disabled={submitMutation.isPending}
               className="pixel-btn text-xs"
@@ -519,6 +605,80 @@ export default function UserHome() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Confirmation AlertDialog - "この内容で間違いありませんか？" */}
+      <AlertDialog open={confirmDialog} onOpenChange={setConfirmDialog}>
+        <AlertDialogContent className="sm:max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <ShieldAlert className="h-5 w-5 text-amber-500" />
+              提出内容の確認
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-left">
+                <p className="text-sm font-medium text-foreground">
+                  この内容で間違いありませんか？
+                </p>
+                {confirmTarget && (
+                  <div className="bg-muted p-3 border space-y-2 text-xs">
+                    <div>
+                      <span className="text-muted-foreground">クエスト: </span>
+                      <span className="font-medium">{confirmTarget.quest?.title || "不明"}</span>
+                    </div>
+                    {confirmTarget.isButtonOnly ? (
+                      <div className="text-muted-foreground">
+                        ボタン完了型のクエストを完了します。XPが即座に付与されます。
+                      </div>
+                    ) : (
+                      <>
+                        {confirmTarget.note && (
+                          <div>
+                            <span className="text-muted-foreground">コメント: </span>
+                            <span>{confirmTarget.note}</span>
+                          </div>
+                        )}
+                        {uploadedFiles.length > 0 && (
+                          <div>
+                            <span className="text-muted-foreground">添付ファイル: </span>
+                            <span>{uploadedFiles.map(f => f.name).join(", ")}</span>
+                          </div>
+                        )}
+                        {confirmTarget.formData && Object.keys(confirmTarget.formData).length > 0 && (
+                          <div className="space-y-1">
+                            <span className="text-muted-foreground">フォーム入力:</span>
+                            {Object.entries(confirmTarget.formData).map(([key, val]) => (
+                              <div key={key} className="pl-2">
+                                <span className="text-muted-foreground">{key}: </span>
+                                <span>{val}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <div className="text-muted-foreground pt-1 border-t">
+                          提出後、管理者の承認をお待ちいただきます。
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="text-xs" onClick={() => { setConfirmDialog(false); setConfirmTarget(null); }}>
+              戻る
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="pixel-btn text-xs"
+              onClick={executeSubmit}
+              disabled={submitMutation.isPending}
+            >
+              <Send className="h-3.5 w-3.5 mr-1" />
+              {submitMutation.isPending ? "提出中..." : "確定して提出"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -141,6 +141,7 @@ export const quests = pgTable("quests", {
   skillCategory: text("skill_category").notNull().$type<SkillCategory>(),
   submissionType: text("submission_type").notNull().$type<QuestSubmissionType>().default("button_only"),
   formTemplate: text("form_template"), // JSON: [{label, type, required}] for form_fill
+  requiresDeliverables: boolean("requires_deliverables").notNull().default(false),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at").defaultNow(),
 });
