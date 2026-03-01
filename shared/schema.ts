@@ -166,6 +166,34 @@ export const questCompletions = pgTable("quest_completions", {
   xpEarned: integer("xp_earned").notNull(),
 });
 
+// --- Daily Chat Logs ---
+export const dailyChatTypes = ["morning", "evening"] as const;
+export type DailyChatType = typeof dailyChatTypes[number];
+
+export const dailyChatTypeLabels: Record<DailyChatType, string> = {
+  morning: "朝の振り返り",
+  evening: "夜の振り返り",
+};
+
+export const dailyChatLogs = pgTable("daily_chat_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employeeId: varchar("employee_id").notNull(),
+  date: text("date").notNull(),               // YYYY-MM-DD
+  type: text("type").notNull().$type<DailyChatType>(),
+  messages: text("messages").notNull(),        // JSON array of {role, content}
+  summary: text("summary").notNull(),          // AI-generated summary for admin
+  xpAwarded: integer("xp_awarded").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertDailyChatLogSchema = createInsertSchema(dailyChatLogs).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type DailyChatLog = typeof dailyChatLogs.$inferSelect;
+export type InsertDailyChatLog = z.infer<typeof insertDailyChatLogSchema>;
+
 export const questAssignmentStatuses = ["active", "pending_review", "approved", "rejected", "completed"] as const;
 export type QuestAssignmentStatus = typeof questAssignmentStatuses[number];
 

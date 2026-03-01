@@ -19,6 +19,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { DailyCheckinQuest } from "@/components/daily-checkin";
 import {
   Sparkles, Star, Flame, Crown, CheckCircle2, Clock, Pencil, Scroll,
   Upload, FileText, Send, RotateCcw, AlertTriangle, Hourglass, ThumbsUp, ThumbsDown,
@@ -183,16 +184,16 @@ export default function UserHome() {
       {/* Avatar & Profile */}
       <div className="flex flex-col items-center gap-3 w-full">
         <div className="relative group">
-          <div className="border-2 border-primary p-2 sm:p-3 bg-card shadow-[4px_4px_0_0_hsl(var(--primary)/0.3)]">
+          <div className="border-2 border-primary p-3 sm:p-4 bg-card shadow-[6px_6px_0_0_hsl(var(--primary)/0.3)]">
             <AvatarDisplay
               config={avatarConfig}
-              size={96}
+              size={160}
               className="sm:hidden"
               onClick={() => setCustomizerOpen(true)}
             />
             <AvatarDisplay
               config={avatarConfig}
-              size={128}
+              size={220}
               className="hidden sm:block"
               onClick={() => setCustomizerOpen(true)}
             />
@@ -217,6 +218,9 @@ export default function UserHome() {
           <XPBar currentXP={employee.currentXP} nextLevelXP={xpForLevel(employee.level)} level={employee.level} size="md" />
         </div>
       </div>
+
+      {/* Daily Check-in Quest (always visible) */}
+      <DailyCheckinQuest employee={employee} avatarConfig={avatarConfig} />
 
       {/* Rejected (needs attention) */}
       {rejectedAssignments.length > 0 && (
