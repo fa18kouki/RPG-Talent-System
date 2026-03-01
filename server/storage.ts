@@ -5,7 +5,8 @@ import {
   type QuestCompletion, type InsertQuestCompletion,
   type User, type InsertUser,
   type QuestAssignment, type InsertQuestAssignment,
-  employees, skills, quests, questCompletions, users, questAssignments,
+  type ChatMessage, type InsertChatMessage,
+  employees, skills, quests, questCompletions, users, questAssignments, chatMessages,
   getLevelFromTotalXP,
 } from "@shared/schema";
 import { db } from "./db";
@@ -44,6 +45,10 @@ export interface IStorage {
   deleteQuestAssignment(id: string): Promise<boolean>;
   getEmployeeByUserId(userId: string): Promise<Employee | undefined>;
   getPendingReviewAssignments(): Promise<QuestAssignment[]>;
+
+  getChatMessagesByEmployee(employeeId: string): Promise<ChatMessage[]>;
+  createChatMessage(data: InsertChatMessage): Promise<ChatMessage>;
+  getChatMessageCountToday(employeeId: string): Promise<number>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -193,6 +198,28 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(questAssignments)
       .where(eq(questAssignments.status, "pending_review"))
       .orderBy(desc(questAssignments.submittedAt));
+  }
+
+  async getChatMessagesByEmployee(employeeId: string): Promise<ChatMessage[]> {
+    return db.select().from(chatMessages)
+      .where(eq(chatMessages.employeeId, employeeId))
+      .orderBy(chatMessages.createdAt);
+  }
+
+  async createChatMessage(data: InsertChatMessage): Promise<ChatMessage> {
+    const [msg] = await db.insert(chatMessages).values(data).returning();
+    return msg;
+  }
+
+  async getChatMessageCountToday(employeeId: string): Promise<number> {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const result = await db.select().from(chatMessages)
+      .where(and(
+        eq(chatMessages.employeeId, employeeId),
+        eq(chatMessages.role, "user"),
+      ));
+    return result.filter(m => m.createdAt && new Date(m.createdAt) >= today).length;
   }
 }
 

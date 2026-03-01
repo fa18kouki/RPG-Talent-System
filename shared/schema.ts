@@ -177,6 +177,15 @@ export const questAssignmentStatusLabels: Record<QuestAssignmentStatus, string> 
   completed: "完了",
 };
 
+export const chatMessages = pgTable("chat_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employeeId: varchar("employee_id").notNull(),
+  role: text("role").notNull().$type<"user" | "assistant">(),
+  content: text("content").notNull(),
+  xpAwarded: integer("xp_awarded").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const questAssignments = pgTable("quest_assignments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   questId: varchar("quest_id").notNull(),
@@ -220,6 +229,11 @@ export const insertUserSchema = createInsertSchema(users).omit({
   createdAt: true,
 });
 
+export const insertChatMessageSchema = createInsertSchema(chatMessages).omit({
+  id: true,
+  createdAt: true,
+});
+
 export const insertQuestAssignmentSchema = createInsertSchema(questAssignments).omit({
   id: true,
   assignedAt: true,
@@ -246,6 +260,8 @@ export type Quest = typeof quests.$inferSelect;
 export type InsertQuest = z.infer<typeof insertQuestSchema>;
 export type QuestCompletion = typeof questCompletions.$inferSelect;
 export type InsertQuestCompletion = z.infer<typeof insertQuestCompletionSchema>;
+export type ChatMessage = typeof chatMessages.$inferSelect;
+export type InsertChatMessage = z.infer<typeof insertChatMessageSchema>;
 export type QuestAssignment = typeof questAssignments.$inferSelect;
 export type InsertQuestAssignment = z.infer<typeof insertQuestAssignmentSchema>;
 
