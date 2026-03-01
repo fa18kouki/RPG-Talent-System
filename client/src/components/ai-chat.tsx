@@ -135,10 +135,10 @@ export function AIChat({ employee, avatarConfig }: AIChatProps) {
                 <AvatarDisplay config={avatarConfig} size={64} />
                 <p className="text-sm font-bold mt-3">{employee.name}さん、こんにちは！</p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  AIナビゲーターです。冒険の相談をしましょう！
+                  仕事の悩みや今日の振り返り、何でも相談してください！
                 </p>
                 <div className="flex flex-wrap gap-1.5 mt-3 justify-center">
-                  {["おはよう", "ステータス", "クエスト", "今日"].map((text) => (
+                  {["今日の仕事を振り返りたい", "悩みを相談したい", "上司に報告を整理したい", "やる気が出ない"].map((text) => (
                     <button
                       key={text}
                       onClick={() => {

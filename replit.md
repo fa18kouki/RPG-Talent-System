@@ -47,16 +47,27 @@ A gamified human resource development platform that represents employees as RPG 
 - `/quests` - Quest management with tabs for active/inactive quests
 - `/admin/users` - User management (admin only) - create, edit roles, delete users
 
+## AI Chat
+
+- **LLM Provider**: Google Gemini (gemini-2.5-flash) via Replit AI Integrations
+- **Env vars**: `AI_INTEGRATIONS_GEMINI_API_KEY`, `AI_INTEGRATIONS_GEMINI_BASE_URL` (auto-managed)
+- **Features**: Natural language conversation with employee context, work consultation, daily review, reporting help, motivation support
+- **System prompt**: Includes employee RPG stats, active quests, skills as context for personalized responses
+- **Chat history**: Last 20 messages sent as conversation context to Gemini
+- **XP rewards**: First 3 daily messages award 10 XP each
+
 ## Key Files
 
 - `shared/schema.ts` - Data models (including users), insert schemas, types, XP/level calculation
 - `server/db.ts` - PostgreSQL connection
 - `server/storage.ts` - Database storage interface (including user CRUD)
-- `server/routes.ts` - REST API endpoints with auth middleware (requireAuth, requireAdmin)
+- `server/routes.ts` - REST API endpoints with auth middleware (requireAuth, requireAdmin), Gemini-powered chat
 - `server/index.ts` - Express server with session middleware setup
 - `server/seed.ts` - Seed data with default users, 5 employees, skills, 8 quests, sample completions
+- `server/replit_integrations/` - Gemini AI integration modules (chat, image, batch)
 - `client/src/hooks/use-auth.ts` - Authentication hook (login, logout, user state)
 - `client/src/pages/login.tsx` - Login page
 - `client/src/pages/admin-users.tsx` - Admin user management page
 - `client/src/index.css` - Pixel art theme CSS with custom properties and pixel shadow/border utilities
+- `client/src/components/ai-chat.tsx` - AI chat floating window component
 - `client/src/components/` - Reusable RPG UI components (character-card, xp-bar, skill-radar, quest-card, class-icon, app-sidebar)

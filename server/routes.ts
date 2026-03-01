@@ -6,6 +6,7 @@ import bcrypt from "bcrypt";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import { GoogleGenAI } from "@google/genai";
 
 // File upload configuration
 const uploadDir = path.join(process.cwd(), "uploads");
@@ -696,24 +697,24 @@ export async function registerRoutes(
         return res.status(400).json({ error: "メッセージを入力してください" });
       }
 
-      // Save user message
       const userMsg = await storage.createChatMessage({
         employeeId: employee.id,
         role: "user",
         content: message.trim(),
       });
 
-      // Generate AI response
       const assignments = await storage.getQuestAssignmentsByEmployee(employee.id);
       const completions = await storage.getCompletionsByEmployee(employee.id);
       const skills = await storage.getSkillsByEmployee(employee.id);
       const allQuests = await storage.getQuests();
       const questMap = new Map(allQuests.map(q => [q.id, q]));
-
       const todayMsgCount = await storage.getChatMessageCountToday(employee.id);
-      const aiResponse = generateAIResponse(employee, assignments, completions, skills, questMap, message.trim(), todayMsgCount);
 
-      // Award XP for first 3 chat messages per day
+      const chatHistory = await storage.getChatMessagesByEmployee(employee.id);
+      const recentHistory = chatHistory.slice(-20);
+
+      const aiResponse = await generateAIResponseWithLLM(employee, assignments, completions, skills, questMap, message.trim(), todayMsgCount, recentHistory);
+
       let xpAwarded = 0;
       if (todayMsgCount <= 3) {
         xpAwarded = 10;
@@ -932,7 +933,15 @@ export async function registerRoutes(
   return httpServer;
 }
 
-function generateAIResponse(
+const geminiAI = new GoogleGenAI({
+  apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
+  httpOptions: {
+    apiVersion: "",
+    baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
+  },
+});
+
+async function generateAIResponseWithLLM(
   employee: Employee,
   assignments: QuestAssignment[],
   completions: { questId: string; xpEarned: number }[],
@@ -940,184 +949,112 @@ function generateAIResponse(
   questMap: Map<string, Quest>,
   userMessage: string,
   todayMsgCount: number,
-): string {
+  chatHistory: { role: string; content: string }[],
+): Promise<string> {
   const className = classLabels[employee.characterClass as CharacterClass] || employee.characterClass;
   const activeQuests = assignments.filter(a => a.status === "active");
   const pendingQuests = assignments.filter(a => a.status === "pending_review");
   const completedCount = completions.length;
   const totalXpEarned = completions.reduce((sum, c) => sum + c.xpEarned, 0);
-  const msg = userMessage.toLowerCase();
 
   const hour = new Date().getHours();
-  const timeGreeting = hour < 12 ? "おはようございます" : hour < 18 ? "こんにちは" : "こんばんは";
+  const timeOfDay = hour < 12 ? "朝" : hour < 18 ? "午後" : "夜";
 
-  // Greeting patterns
-  if (msg.match(/おはよう|こんにちは|こんばんは|やあ|ハロー|hello|hi$/i)) {
-    const activeQuestNames = activeQuests.slice(0, 2).map(a => {
-      const q = questMap.get(a.questId);
-      return q ? `「${q.title}」` : "";
-    }).filter(Boolean).join("と");
+  const topSkills = [...skills].sort((a, b) => b.level - a.level).slice(0, 5);
+  const topSkillsSummary = topSkills.map(s => {
+    const cat = skillCategoryLabels[s.category as keyof typeof skillCategoryLabels] || s.category;
+    return `${s.name}(${cat}, Lv.${s.level})`;
+  }).join("、");
 
-    let greeting = `${timeGreeting}、${employee.name}さん！${className}として今日も冒険を続けましょう！`;
-    if (activeQuests.length > 0) {
-      greeting += `\n\n現在${activeQuests.length}件のアクティブクエストがあります。`;
-      if (activeQuestNames) {
-        greeting += `${activeQuestNames}に取り組んでみてはいかがでしょう？`;
-      }
+  const activeQuestsSummary = activeQuests.map(a => {
+    const q = questMap.get(a.questId);
+    if (!q) return null;
+    const diff = difficultyLabels[q.difficulty as keyof typeof difficultyLabels] || q.difficulty;
+    let info = `「${q.title}」(難易度: ${diff}, 報酬: ${q.xpReward}XP)`;
+    if (a.dueDate) {
+      const due = new Date(a.dueDate);
+      const daysLeft = Math.ceil((due.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+      info += ` 期限: ${due.toLocaleDateString("ja-JP")}(残り${daysLeft}日)`;
     }
-    if (todayMsgCount <= 3) {
-      greeting += `\n\n💡 会話でXPを獲得できます！（本日あと${Math.max(0, 3 - todayMsgCount)}回）`;
+    return info;
+  }).filter(Boolean).join("\n  ");
+
+  const pendingQuestsSummary = pendingQuests.map(a => {
+    const q = questMap.get(a.questId);
+    return q ? `「${q.title}」` : null;
+  }).filter(Boolean).join("、");
+
+  const systemPrompt = `あなたは「冒険ナビゲーター」という名前のAIアシスタントです。RPG風の人材育成システム「Quest HR」の中で、従業員（冒険者）をサポートする役割を持っています。
+
+## あなたの役割
+- ユーザーの仕事の悩み、日々の業務内容、困っていることを丁寧に聞き取る
+- 上司への報告内容の整理を手伝う
+- 仕事のモチベーションを上げるアドバイスをする
+- 具体的で実用的なアドバイスを提供する
+- RPGの世界観を軽く取り入れつつ、実際の仕事に役立つ会話をする
+
+## 会話のスタイル
+- 日本語で親しみやすく、でも丁寧に話す
+- ユーザーの話をしっかり聞いて、共感を示す
+- 一方的にアドバイスするのではなく、質問を通じて相手の状況を深く理解する
+- 悩み相談では、まず気持ちに寄り添ってから具体的な提案をする
+- 上司への報告を整理する場合は、要点をまとめて分かりやすく構成する
+- 長すぎない返答を心がける（200文字〜400文字程度）
+
+## 聞き取りのポイント
+- 「今日はどんな仕事をしましたか？」「何か困っていることはありますか？」など、自然な質問で業務内容を引き出す
+- 悩みがあれば「もう少し詳しく教えてもらえますか？」と掘り下げる
+- 上司に報告したいことがあれば「どんなポイントを伝えたいですか？」と整理を手伝う
+- 抽象的な相談には具体的な行動に落とし込む提案をする
+
+## 現在のユーザー情報
+- 名前: ${employee.name}
+- クラス: ${className}
+- レベル: ${employee.level}
+- 累計XP: ${employee.totalXP}
+- クエスト達成数: ${completedCount}件
+- 時間帯: ${timeOfDay}
+${topSkillsSummary ? `- スキル: ${topSkillsSummary}` : "- スキル: まだ登録なし"}
+${activeQuestsSummary ? `- 進行中のクエスト:\n  ${activeQuestsSummary}` : "- 進行中のクエスト: なし"}
+${pendingQuestsSummary ? `- 承認待ちクエスト: ${pendingQuestsSummary}` : ""}
+${todayMsgCount <= 3 ? `- 本日の会話XPボーナス: あと${Math.max(0, 3 - todayMsgCount)}回獲得可能` : ""}
+
+## 注意事項
+- ユーザーの個人情報や機密情報を他の人と共有することを提案しない
+- 医療・法律に関する専門的なアドバイスは控え、専門家への相談を勧める
+- ネガティブな内容でも否定せず、建設的な方向に導く`;
+
+  const contents = [];
+
+  for (const msg of chatHistory.slice(-18)) {
+    if (msg.role === "user") {
+      contents.push({ role: "user" as const, parts: [{ text: msg.content }] });
+    } else if (msg.role === "assistant") {
+      contents.push({ role: "model" as const, parts: [{ text: msg.content }] });
     }
-    return greeting;
   }
 
-  // Status / analysis request
-  if (msg.match(/ステータス|状態|分析|レベル|今の|自分の|強さ|能力/)) {
-    const topSkills = [...skills].sort((a, b) => b.level - a.level).slice(0, 3);
-    const skillSummary = topSkills.map(s => `${s.name}(Lv.${s.level})`).join("、");
+  contents.push({ role: "user" as const, parts: [{ text: userMessage }] });
 
-    let analysis = `📊 **${employee.name}さんのステータス分析**\n\n`;
-    analysis += `🎭 クラス: ${className}\n`;
-    analysis += `⭐ レベル: ${employee.level}\n`;
-    analysis += `✨ 累計XP: ${employee.totalXP}\n`;
-    analysis += `🏆 クエスト達成数: ${completedCount}件\n`;
-    if (skillSummary) {
-      analysis += `\n💪 注目スキル: ${skillSummary}\n`;
-    }
-
-    if (employee.level < 5) {
-      analysis += `\nまだ冒険の序盤ですね！クエストをこなしてどんどんレベルアップしていきましょう。`;
-    } else if (employee.level < 10) {
-      analysis += `\n着実に成長しています！この調子でクエストに挑戦し続ければ、もっと強くなれますよ。`;
-    } else {
-      analysis += `\n素晴らしい成長ですね！ベテラン冒険者としてチームを引っ張っていきましょう。`;
-    }
-
-    return analysis;
-  }
-
-  // Quest-related questions
-  if (msg.match(/クエスト|タスク|やること|何する|何をすれば|おすすめ/)) {
-    if (activeQuests.length === 0) {
-      return "現在アクティブなクエストはありません。管理者から新しいクエストが割り当てられるのを待ちましょう！\n\nその間、スキルを磨いたり、チームメンバーをサポートしたりするのもいいですね。";
-    }
-
-    let response = `📋 **現在のクエスト状況**\n\n`;
-    response += `アクティブ: ${activeQuests.length}件\n`;
-    if (pendingQuests.length > 0) {
-      response += `承認待ち: ${pendingQuests.length}件\n`;
-    }
-    response += `\n`;
-
-    for (const a of activeQuests) {
-      const q = questMap.get(a.questId);
-      if (q) {
-        const difficulty = difficultyLabels[q.difficulty as keyof typeof difficultyLabels] || q.difficulty;
-        response += `⚔️ **${q.title}** (${difficulty} / +${q.xpReward}XP)\n`;
-        if (a.dueDate) {
-          const due = new Date(a.dueDate);
-          const daysLeft = Math.ceil((due.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-          response += `   期限: ${due.toLocaleDateString("ja-JP")}`;
-          if (daysLeft <= 1) {
-            response += ` ⚠️ まもなく期限です！`;
-          } else if (daysLeft <= 3) {
-            response += ` (残り${daysLeft}日)`;
-          }
-          response += `\n`;
-        }
-      }
-    }
-
-    response += `\n期限の近いクエストから取り組むのがおすすめです！`;
-    return response;
-  }
-
-  // Today / what happened
-  if (msg.match(/今日|きょう|何があった|何かあった|日報|振り返り/)) {
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    const todayCompletions = completions.filter(c => {
-      // We don't have timestamps easily accessible here, so give general advice
-      return false;
+  try {
+    const response = await geminiAI.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents,
+      config: {
+        maxOutputTokens: 8192,
+        systemInstruction: systemPrompt,
+      },
     });
 
-    let response = `${timeGreeting}、${employee.name}さん！\n\n`;
-    response += `📅 **今日の振り返り**\n\n`;
-
-    if (activeQuests.length > 0) {
-      response += `現在、${activeQuests.length}件のクエストに取り組み中です。\n`;
-      const urgentQuests = activeQuests.filter(a => {
-        if (!a.dueDate) return false;
-        const daysLeft = Math.ceil((new Date(a.dueDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-        return daysLeft <= 2;
-      });
-      if (urgentQuests.length > 0) {
-        response += `\n⚠️ 期限が近いクエストが${urgentQuests.length}件あります。優先的に対応しましょう！\n`;
-      }
+    const text = response.text;
+    if (text && text.trim().length > 0) {
+      return text.trim();
     }
-
-    if (pendingQuests.length > 0) {
-      response += `\n⏳ ${pendingQuests.length}件のクエストが承認待ちです。結果を楽しみに待ちましょう！\n`;
-    }
-
-    response += `\n💬 何か困っていることや、相談したいことがあれば教えてくださいね。一緒に考えましょう！`;
-    return response;
+    return `${employee.name}さん、すみません、うまく返答できませんでした。もう一度お話しいただけますか？`;
+  } catch (error) {
+    console.error("Gemini API error:", error);
+    return `${employee.name}さん、申し訳ありません。AIの応答でエラーが発生しました。しばらくしてからもう一度お試しください。`;
   }
-
-  // Encouragement / motivation
-  if (msg.match(/頑張|がんば|疲れ|つかれ|やる気|モチベ|大変|むずかし|難し/)) {
-    const encouragements = [
-      `${className}としての力は確実に成長していますよ、${employee.name}さん。レベル${employee.level}まで来たのは大きな実績です！`,
-      `冒険にはつらい時もありますが、それが成長の証です。${completedCount}件のクエストを乗り越えてきた経験は本物です！`,
-      `少し休憩するのも大切な戦略です。回復してからまた挑戦しましょう！${className}の力はいつでも発揮できますよ。`,
-    ];
-    let response = encouragements[Math.floor(Math.random() * encouragements.length)];
-    if (todayMsgCount <= 3) {
-      response += `\n\n✨ +10 XP 獲得！会話も冒険の一部です！`;
-    }
-    return response;
-  }
-
-  // Skill questions
-  if (msg.match(/スキル|得意|苦手|伸ばし|成長/)) {
-    if (skills.length === 0) {
-      return "まだスキルが登録されていないようです。クエストを進めていくとスキルが磨かれていきますよ！";
-    }
-
-    const topSkills = [...skills].sort((a, b) => b.level - a.level).slice(0, 3);
-    const weakSkills = [...skills].sort((a, b) => a.level - b.level).slice(0, 2);
-
-    let response = `🎯 **スキル分析**\n\n`;
-    response += `💪 **得意分野:**\n`;
-    topSkills.forEach(s => {
-      const cat = skillCategoryLabels[s.category as keyof typeof skillCategoryLabels] || s.category;
-      response += `  ${s.name} (${cat}) - Lv.${s.level}\n`;
-    });
-
-    if (weakSkills.length > 0 && weakSkills[0].level < 5) {
-      response += `\n📚 **伸びしろのある分野:**\n`;
-      weakSkills.forEach(s => {
-        const cat = skillCategoryLabels[s.category as keyof typeof skillCategoryLabels] || s.category;
-        response += `  ${s.name} (${cat}) - Lv.${s.level}\n`;
-      });
-      response += `\nこの分野のクエストに挑戦すると、バランスよく成長できますよ！`;
-    }
-
-    return response;
-  }
-
-  // Default response
-  const defaults = [
-    `なるほど！${employee.name}さん、いい視点ですね。${className}らしい考え方です。\n\n今のレベル${employee.level}の実力があれば、きっとうまくいきますよ。何かクエストの相談があれば聞かせてくださいね！`,
-    `${employee.name}さん、そうですか！日々の取り組みが冒険者としての成長につながっています。\n\n何か具体的に相談したいことがあれば、「ステータス」「クエスト」「スキル」などと聞いてみてくださいね！`,
-    `了解です！${className}の${employee.name}さんなら、きっと素晴らしい成果を出せますよ。\n\n💡ヒント: 「今日」「ステータス」「クエスト」「スキル」などのキーワードで詳しい情報をお伝えできます！`,
-  ];
-
-  let response = defaults[Math.floor(Math.random() * defaults.length)];
-  if (todayMsgCount <= 3) {
-    response += `\n\n✨ +10 XP 獲得！`;
-  }
-  return response;
 }
 
 function generateDailySummary(
