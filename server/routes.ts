@@ -1,7 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertEmployeeSchema, insertQuestSchema, insertQuestCompletionSchema, insertSkillSchema, loginSchema, insertUserSchema, insertQuestAssignmentSchema, avatarConfigSchema } from "@shared/schema";
+import { insertEmployeeSchema, insertQuestSchema, insertQuestCompletionSchema, insertSkillSchema, loginSchema, insertUserSchema, insertQuestAssignmentSchema, avatarConfigSchema, classLabels, skillCategoryLabels, difficultyLabels, type CharacterClass, type Employee, type Quest, type QuestAssignment } from "@shared/schema";
 import bcrypt from "bcrypt";
 import multer from "multer";
 import path from "path";
@@ -573,6 +573,106 @@ export async function registerRoutes(
     }
   });
 
+  // === Quest History (detailed completions for user) ===
+  app.get("/api/my/quest-history", requireAuth, async (req, res) => {
+    try {
+      const employee = await storage.getEmployeeByUserId(req.session.userId!);
+      if (!employee) return res.status(404).json({ error: "冒険者データが見つかりません" });
+
+      const completions = await storage.getCompletionsByEmployee(employee.id);
+      const allQuests = await storage.getQuests();
+      const questMap = new Map(allQuests.map(q => [q.id, q]));
+
+      // Get all assignments for this employee to include submission details
+      const assignments = await storage.getQuestAssignmentsByEmployee(employee.id);
+      const completedAssignments = assignments.filter(a => a.status === "completed" || a.status === "approved");
+
+      const history = completions.map(c => {
+        const quest = questMap.get(c.questId);
+        const assignment = completedAssignments.find(a => a.questId === c.questId);
+        return {
+          ...c,
+          quest: quest || null,
+          assignment: assignment || null,
+        };
+      });
+
+      res.json(history);
+    } catch (err) {
+      console.error("Error getting quest history:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // === AI Chat ===
+  app.get("/api/my/chat", requireAuth, async (req, res) => {
+    try {
+      const employee = await storage.getEmployeeByUserId(req.session.userId!);
+      if (!employee) return res.status(404).json({ error: "冒険者データが見つかりません" });
+
+      const messages = await storage.getChatMessagesByEmployee(employee.id);
+      res.json(messages);
+    } catch (err) {
+      console.error("Error getting chat messages:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.post("/api/my/chat", requireAuth, async (req, res) => {
+    try {
+      const employee = await storage.getEmployeeByUserId(req.session.userId!);
+      if (!employee) return res.status(404).json({ error: "冒険者データが見つかりません" });
+
+      const { message } = req.body;
+      if (!message || typeof message !== "string" || message.trim().length === 0) {
+        return res.status(400).json({ error: "メッセージを入力してください" });
+      }
+
+      // Save user message
+      const userMsg = await storage.createChatMessage({
+        employeeId: employee.id,
+        role: "user",
+        content: message.trim(),
+      });
+
+      // Generate AI response
+      const assignments = await storage.getQuestAssignmentsByEmployee(employee.id);
+      const completions = await storage.getCompletionsByEmployee(employee.id);
+      const skills = await storage.getSkillsByEmployee(employee.id);
+      const allQuests = await storage.getQuests();
+      const questMap = new Map(allQuests.map(q => [q.id, q]));
+
+      const todayMsgCount = await storage.getChatMessageCountToday(employee.id);
+      const aiResponse = generateAIResponse(employee, assignments, completions, skills, questMap, message.trim(), todayMsgCount);
+
+      // Award XP for first 3 chat messages per day
+      let xpAwarded = 0;
+      if (todayMsgCount <= 3) {
+        xpAwarded = 10;
+        const newTotalXP = employee.totalXP + xpAwarded;
+        const { getLevelFromTotalXP } = await import("@shared/schema");
+        const levelInfo = getLevelFromTotalXP(newTotalXP);
+        await storage.updateEmployee(employee.id, {
+          totalXP: newTotalXP,
+          currentXP: levelInfo.currentXP,
+          level: levelInfo.level,
+        } as any);
+      }
+
+      const assistantMsg = await storage.createChatMessage({
+        employeeId: employee.id,
+        role: "assistant",
+        content: aiResponse,
+        xpAwarded,
+      });
+
+      res.json({ userMessage: userMsg, assistantMessage: assistantMsg, xpAwarded });
+    } catch (err) {
+      console.error("Error in chat:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // Resubmit rejected quest (user re-activates)
   app.patch("/api/my/quests/:assignmentId/resubmit", requireAuth, async (req, res) => {
     try {
@@ -605,4 +705,192 @@ export async function registerRoutes(
   });
 
   return httpServer;
+}
+
+function generateAIResponse(
+  employee: Employee,
+  assignments: QuestAssignment[],
+  completions: { questId: string; xpEarned: number }[],
+  skills: { name: string; category: string; level: number }[],
+  questMap: Map<string, Quest>,
+  userMessage: string,
+  todayMsgCount: number,
+): string {
+  const className = classLabels[employee.characterClass as CharacterClass] || employee.characterClass;
+  const activeQuests = assignments.filter(a => a.status === "active");
+  const pendingQuests = assignments.filter(a => a.status === "pending_review");
+  const completedCount = completions.length;
+  const totalXpEarned = completions.reduce((sum, c) => sum + c.xpEarned, 0);
+  const msg = userMessage.toLowerCase();
+
+  const hour = new Date().getHours();
+  const timeGreeting = hour < 12 ? "おはようございます" : hour < 18 ? "こんにちは" : "こんばんは";
+
+  // Greeting patterns
+  if (msg.match(/おはよう|こんにちは|こんばんは|やあ|ハロー|hello|hi$/i)) {
+    const activeQuestNames = activeQuests.slice(0, 2).map(a => {
+      const q = questMap.get(a.questId);
+      return q ? `「${q.title}」` : "";
+    }).filter(Boolean).join("と");
+
+    let greeting = `${timeGreeting}、${employee.name}さん！${className}として今日も冒険を続けましょう！`;
+    if (activeQuests.length > 0) {
+      greeting += `\n\n現在${activeQuests.length}件のアクティブクエストがあります。`;
+      if (activeQuestNames) {
+        greeting += `${activeQuestNames}に取り組んでみてはいかがでしょう？`;
+      }
+    }
+    if (todayMsgCount <= 3) {
+      greeting += `\n\n💡 会話でXPを獲得できます！（本日あと${Math.max(0, 3 - todayMsgCount)}回）`;
+    }
+    return greeting;
+  }
+
+  // Status / analysis request
+  if (msg.match(/ステータス|状態|分析|レベル|今の|自分の|強さ|能力/)) {
+    const topSkills = [...skills].sort((a, b) => b.level - a.level).slice(0, 3);
+    const skillSummary = topSkills.map(s => `${s.name}(Lv.${s.level})`).join("、");
+
+    let analysis = `📊 **${employee.name}さんのステータス分析**\n\n`;
+    analysis += `🎭 クラス: ${className}\n`;
+    analysis += `⭐ レベル: ${employee.level}\n`;
+    analysis += `✨ 累計XP: ${employee.totalXP}\n`;
+    analysis += `🏆 クエスト達成数: ${completedCount}件\n`;
+    if (skillSummary) {
+      analysis += `\n💪 注目スキル: ${skillSummary}\n`;
+    }
+
+    if (employee.level < 5) {
+      analysis += `\nまだ冒険の序盤ですね！クエストをこなしてどんどんレベルアップしていきましょう。`;
+    } else if (employee.level < 10) {
+      analysis += `\n着実に成長しています！この調子でクエストに挑戦し続ければ、もっと強くなれますよ。`;
+    } else {
+      analysis += `\n素晴らしい成長ですね！ベテラン冒険者としてチームを引っ張っていきましょう。`;
+    }
+
+    return analysis;
+  }
+
+  // Quest-related questions
+  if (msg.match(/クエスト|タスク|やること|何する|何をすれば|おすすめ/)) {
+    if (activeQuests.length === 0) {
+      return "現在アクティブなクエストはありません。管理者から新しいクエストが割り当てられるのを待ちましょう！\n\nその間、スキルを磨いたり、チームメンバーをサポートしたりするのもいいですね。";
+    }
+
+    let response = `📋 **現在のクエスト状況**\n\n`;
+    response += `アクティブ: ${activeQuests.length}件\n`;
+    if (pendingQuests.length > 0) {
+      response += `承認待ち: ${pendingQuests.length}件\n`;
+    }
+    response += `\n`;
+
+    for (const a of activeQuests) {
+      const q = questMap.get(a.questId);
+      if (q) {
+        const difficulty = difficultyLabels[q.difficulty as keyof typeof difficultyLabels] || q.difficulty;
+        response += `⚔️ **${q.title}** (${difficulty} / +${q.xpReward}XP)\n`;
+        if (a.dueDate) {
+          const due = new Date(a.dueDate);
+          const daysLeft = Math.ceil((due.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+          response += `   期限: ${due.toLocaleDateString("ja-JP")}`;
+          if (daysLeft <= 1) {
+            response += ` ⚠️ まもなく期限です！`;
+          } else if (daysLeft <= 3) {
+            response += ` (残り${daysLeft}日)`;
+          }
+          response += `\n`;
+        }
+      }
+    }
+
+    response += `\n期限の近いクエストから取り組むのがおすすめです！`;
+    return response;
+  }
+
+  // Today / what happened
+  if (msg.match(/今日|きょう|何があった|何かあった|日報|振り返り/)) {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayCompletions = completions.filter(c => {
+      // We don't have timestamps easily accessible here, so give general advice
+      return false;
+    });
+
+    let response = `${timeGreeting}、${employee.name}さん！\n\n`;
+    response += `📅 **今日の振り返り**\n\n`;
+
+    if (activeQuests.length > 0) {
+      response += `現在、${activeQuests.length}件のクエストに取り組み中です。\n`;
+      const urgentQuests = activeQuests.filter(a => {
+        if (!a.dueDate) return false;
+        const daysLeft = Math.ceil((new Date(a.dueDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+        return daysLeft <= 2;
+      });
+      if (urgentQuests.length > 0) {
+        response += `\n⚠️ 期限が近いクエストが${urgentQuests.length}件あります。優先的に対応しましょう！\n`;
+      }
+    }
+
+    if (pendingQuests.length > 0) {
+      response += `\n⏳ ${pendingQuests.length}件のクエストが承認待ちです。結果を楽しみに待ちましょう！\n`;
+    }
+
+    response += `\n💬 何か困っていることや、相談したいことがあれば教えてくださいね。一緒に考えましょう！`;
+    return response;
+  }
+
+  // Encouragement / motivation
+  if (msg.match(/頑張|がんば|疲れ|つかれ|やる気|モチベ|大変|むずかし|難し/)) {
+    const encouragements = [
+      `${className}としての力は確実に成長していますよ、${employee.name}さん。レベル${employee.level}まで来たのは大きな実績です！`,
+      `冒険にはつらい時もありますが、それが成長の証です。${completedCount}件のクエストを乗り越えてきた経験は本物です！`,
+      `少し休憩するのも大切な戦略です。回復してからまた挑戦しましょう！${className}の力はいつでも発揮できますよ。`,
+    ];
+    let response = encouragements[Math.floor(Math.random() * encouragements.length)];
+    if (todayMsgCount <= 3) {
+      response += `\n\n✨ +10 XP 獲得！会話も冒険の一部です！`;
+    }
+    return response;
+  }
+
+  // Skill questions
+  if (msg.match(/スキル|得意|苦手|伸ばし|成長/)) {
+    if (skills.length === 0) {
+      return "まだスキルが登録されていないようです。クエストを進めていくとスキルが磨かれていきますよ！";
+    }
+
+    const topSkills = [...skills].sort((a, b) => b.level - a.level).slice(0, 3);
+    const weakSkills = [...skills].sort((a, b) => a.level - b.level).slice(0, 2);
+
+    let response = `🎯 **スキル分析**\n\n`;
+    response += `💪 **得意分野:**\n`;
+    topSkills.forEach(s => {
+      const cat = skillCategoryLabels[s.category as keyof typeof skillCategoryLabels] || s.category;
+      response += `  ${s.name} (${cat}) - Lv.${s.level}\n`;
+    });
+
+    if (weakSkills.length > 0 && weakSkills[0].level < 5) {
+      response += `\n📚 **伸びしろのある分野:**\n`;
+      weakSkills.forEach(s => {
+        const cat = skillCategoryLabels[s.category as keyof typeof skillCategoryLabels] || s.category;
+        response += `  ${s.name} (${cat}) - Lv.${s.level}\n`;
+      });
+      response += `\nこの分野のクエストに挑戦すると、バランスよく成長できますよ！`;
+    }
+
+    return response;
+  }
+
+  // Default response
+  const defaults = [
+    `なるほど！${employee.name}さん、いい視点ですね。${className}らしい考え方です。\n\n今のレベル${employee.level}の実力があれば、きっとうまくいきますよ。何かクエストの相談があれば聞かせてくださいね！`,
+    `${employee.name}さん、そうですか！日々の取り組みが冒険者としての成長につながっています。\n\n何か具体的に相談したいことがあれば、「ステータス」「クエスト」「スキル」などと聞いてみてくださいね！`,
+    `了解です！${className}の${employee.name}さんなら、きっと素晴らしい成果を出せますよ。\n\n💡ヒント: 「今日」「ステータス」「クエスト」「スキル」などのキーワードで詳しい情報をお伝えできます！`,
+  ];
+
+  let response = defaults[Math.floor(Math.random() * defaults.length)];
+  if (todayMsgCount <= 3) {
+    response += `\n\n✨ +10 XP 獲得！`;
+  }
+  return response;
 }
